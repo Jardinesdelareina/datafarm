@@ -1,15 +1,27 @@
 import websocket, json, threading, os
 import pandas as pd
 
-SYMBOL = ['btcusdt', 'adausdt', 'xrpusdt', 'ethusdt', 'linkusdt']
+# Тикеры фьючерсов Binance
+SYMBOL = [
+    'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
+    'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
+    'vetusdt', 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
+]
+
+# Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
+# Открытие соединения
 def on_open(ws):
-    print('Online')
+    for ticker in SYMBOL:
+        ticker = ticker.upper()
+        print(f'{ticker} Online')
 
+# Закрытие соединения
 def on_close(ws):
     print('Offline')
 
+# Обработка потока Binance
 def on_message(ws, df):
     df = pd.DataFrame([json.loads(df)])
     df = df.loc[:, ['s', 'E', 'p']]
@@ -24,6 +36,7 @@ def on_message(ws, df):
     print(df.Symbol, df.Price)
     return df
 
+# Точка подключения websocket для потока
 def main(socket):
     ws = websocket.WebSocketApp(
         socket, 
@@ -32,6 +45,7 @@ def main(socket):
         on_message=on_message)
     ws.run_forever()
 
+# Разделение потоков: один тикер - один поток
 threads = []
 for socket in SOCKETS:
     thread_socket = threading.Thread(target=main, args=(socket,))

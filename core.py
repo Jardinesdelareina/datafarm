@@ -1,6 +1,16 @@
 import websocket, json, threading
 import pandas as pd
+import environs
 from sqlalchemy import create_engine
+
+env = environs.Env()
+env.read_env('.env')
+
+USER = env('USER')
+PASSWORD = env('PASSWORD')
+HOST = env('HOST')
+PORT = env('PORT')
+DB_NAME = env('DB_NAME')
 
 # Тикеры фьючерсов Binance
 SYMBOL = [
@@ -12,8 +22,8 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
-# Подключение к Sqlite3
-ENGINE = create_engine(f'sqlite:///sqlite.db')
+ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
+#ENGINE = create_engine(f'sqlite:///sqlite.db')
 
 # Открытие соединения
 def on_open(ws):
@@ -29,12 +39,12 @@ def on_close(ws):
 def on_message(ws, df):
     df = pd.DataFrame([json.loads(df)])
     df = df.loc[:, ['s', 'E', 'p']]
-    df.columns = ['Symbol', 'Time', 'Price']
-    df.Time = pd.to_datetime(df.Time, unit='ms', utc=True, infer_datetime_format=True)
-    df.Price = df.Price.astype(float)
-    db_ticker = df.Symbol.iloc[0].upper()
+    df.columns = ['symbol', 'time', 'price']
+    df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
+    df.price = df.price.astype(float)
+    db_ticker = df.symbol.iloc[0].lower()
     df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
-    print(df.Symbol, df.Price)
+    print(df.symbol, df.price)
 
 # Точка подключения websocket для потока
 def main(socket):

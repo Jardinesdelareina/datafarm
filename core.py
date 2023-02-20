@@ -22,8 +22,8 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
+# Подключение к PostgreSQL 
 ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
-#ENGINE = create_engine(f'sqlite:///sqlite.db')
 
 # Открытие соединения
 def on_open(ws):

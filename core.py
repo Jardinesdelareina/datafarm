@@ -1,6 +1,16 @@
-import json
+import websocket, json, threading
 import pandas as pd
-from db import ENGINE
+import environs
+from sqlalchemy import create_engine, text
+
+env = environs.Env()
+env.read_env('.env')
+
+USER = env('USER')
+PASSWORD = env('PASSWORD')
+HOST = env('HOST')
+PORT = env('PORT')
+DB_NAME = env('DB_NAME')
 
 # Тикеры фьючерсов Binance
 SYMBOL = [
@@ -9,9 +19,24 @@ SYMBOL = [
     'vetusdt', 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
 ]
 
+# Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
-def get_data(df):
+# Подключение к PostgreSQL 
+ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
+
+# Открытие соединения
+def on_open(ws):
+    for ticker in SYMBOL:
+        ticker = ticker.upper()
+        print(f'{ticker} Online')
+
+# Закрытие соединения
+def on_close(ws):
+    print('Offline')
+
+# Обработка потока Binance
+def on_message(ws, df):
     df = pd.DataFrame([json.loads(df)])
     df = df.loc[:, ['s', 'E', 'p']]
     df.columns = ['symbol', 'time', 'price']
@@ -19,4 +44,43 @@ def get_data(df):
     df.price = df.price.astype(float)
     db_ticker = df.symbol.iloc[0].lower()
     df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
-    print(df.symbol, df.price)
+    with ENGINE.connect() as conn:
+
+        max_price_last_hour = conn.execute(text(
+            f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+        ))
+        max_price_last_hour = pd.DataFrame(max_price_last_hour.fetchall()) 
+        max_price_last_hour = max_price_last_hour.iloc[-1].values
+
+        last_price = conn.execute(text(
+            f"SELECT price FROM {db_ticker} ORDER BY time DESC LIMIT 1"
+        ))
+        last_price = pd.DataFrame(last_price.fetchall())
+        last_price = last_price.iloc[-1].values
+
+    one_percent_bear = max_price_last_hour - (max_price_last_hour / 100)
+    one_percent_bull = max_price_last_hour + (max_price_last_hour / 100)
+
+    if last_price == one_percent_bear:
+        print('Sell')
+    elif last_price == one_percent_bull:
+        print('Buy')
+    else:
+        print(f'Price {db_ticker.upper()}: {last_price} \n Buy: {one_percent_bull} \n Sell: {one_percent_bear} \n')
+
+# Точка подключения websocket для потока
+def main(socket):
+    ws = websocket.WebSocketApp(
+        socket, 
+        on_open=on_open, 
+        on_close=on_close, 
+        on_message=on_message
+    )
+    ws.run_forever()
+
+# Разделение потоков: один тикер - один поток
+threads = []
+for socket in SOCKETS:
+    thread_socket = threading.Thread(target=main, args=(socket,))
+    threads.append(thread_socket)
+    thread_socket.start()

@@ -66,6 +66,7 @@ def on_message(ws, df):
         max_price_last_hour = pd.DataFrame(max_price_last_hour.fetchall()) 
         max_price_last_hour = max_price_last_hour.iloc[-1].values
 
+        # Минимальная цена тикера за последний час
         min_price_last_hour = conn.execute(text(
             f"SELECT MIN(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
         ))

@@ -25,14 +25,26 @@ SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMB
 # Подключение к PostgreSQL 
 ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
 
-# Открытие соединения
+# Открытие соединения, создание базы данных
 def on_open(ws):
+    try:
+        ENGINE.execute("CREATE DATABASE datafarm")
+        print('База данных успешно создана')
+    except Exception as e:
+        print('Ошибка при создании базы данных')
+        raise e
     for ticker in SYMBOL:
         ticker = ticker.upper()
         print(f'{ticker} Online')
 
-# Закрытие соединения
+# Закрытие соединения, удаление базы данных
 def on_close(ws):
+    try:
+        ENGINE.execute("DROP DATABASE datafarm")
+        print('База данных успешно удалена')
+    except Exception as e:
+        print('Ошибка при удалении базы данных')
+        raise e
     print('Offline')
 
 # Обработка потока Binance
@@ -44,14 +56,23 @@ def on_message(ws, df):
     df.price = df.price.astype(float)
     db_ticker = df.symbol.iloc[0].lower()
     df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
+
     with ENGINE.connect() as conn:
 
+        # Максимальная цена тикера за последний час
         max_price_last_hour = conn.execute(text(
             f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
         ))
         max_price_last_hour = pd.DataFrame(max_price_last_hour.fetchall()) 
         max_price_last_hour = max_price_last_hour.iloc[-1].values
 
+        min_price_last_hour = conn.execute(text(
+            f"SELECT MIN(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+        ))
+        min_price_last_hour = pd.DataFrame(min_price_last_hour.fetchall()) 
+        min_price_last_hour = min_price_last_hour.iloc[-1].values
+
+        # Последняя цена тикера
         last_price = conn.execute(text(
             f"SELECT price FROM {db_ticker} ORDER BY time DESC LIMIT 1"
         ))
@@ -59,7 +80,7 @@ def on_message(ws, df):
         last_price = last_price.iloc[-1].values
 
     one_percent_bear = max_price_last_hour - (max_price_last_hour / 100)
-    one_percent_bull = max_price_last_hour + (max_price_last_hour / 100)
+    one_percent_bull = min_price_last_hour + (max_price_last_hour / 100)
 
     if last_price == one_percent_bear:
         print('Sell')

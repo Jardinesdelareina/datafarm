@@ -1,16 +1,7 @@
 import websocket, json, threading
 import pandas as pd
-import environs
-from sqlalchemy import create_engine, text
-
-env = environs.Env()
-env.read_env('.env')
-
-USER = env('USER')
-PASSWORD = env('PASSWORD')
-HOST = env('HOST')
-PORT = env('PORT')
-DB_NAME = env('DB_NAME')
+from sqlalchemy import text
+from db import ENGINE, create_db, drop_db
 
 # Тикеры фьючерсов Binance
 SYMBOL = [
@@ -22,29 +13,16 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
-# Подключение к PostgreSQL 
-ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
-
 # Открытие соединения, создание базы данных
 def on_open(ws):
-    try:
-        ENGINE.execute("CREATE DATABASE datafarm")
-        print('База данных успешно создана')
-    except Exception as e:
-        print('Ошибка при создании базы данных')
-        raise e
+    create_db()
     for ticker in SYMBOL:
         ticker = ticker.upper()
         print(f'{ticker} Online')
 
 # Закрытие соединения, удаление базы данных
 def on_close(ws):
-    try:
-        ENGINE.execute("DROP DATABASE datafarm")
-        print('База данных успешно удалена')
-    except Exception as e:
-        print('Ошибка при удалении базы данных')
-        raise e
+    drop_db()
     print('Offline')
 
 # Обработка потока Binance

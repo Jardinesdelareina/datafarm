@@ -24,16 +24,16 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
-# Подключение к PostgreSQL 
+# Подключение к PostgreSQL
 ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
 
-# Открытие соединения, создание базы данных
+# Открытие соединения
 def on_open(ws):
     for ticker in SYMBOL:
         ticker = ticker.upper()
         print(f'{ticker} Online')
-
-# Закрытие соединения, удаление базы данных
+    
+# Закрытие соединения
 def on_close(ws):
     print('Offline')
 

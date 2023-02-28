@@ -1,7 +1,18 @@
-import websocket, json, threading
+import websocket, json, threading, requests, environs
 import pandas as pd
-from sqlalchemy import text
-from db import ENGINE, create_db, drop_db
+from sqlalchemy import create_engine, text
+
+env = environs.Env()
+env.read_env('.env')
+
+USER = env('USER')
+PASSWORD = env('PASSWORD')
+HOST = env('HOST')
+PORT = env('PORT')
+DB_NAME = env('DB_NAME')
+
+TELETOKEN = env('TELETOKEN')
+CHAT_ID = env('CHAT_ID')
 
 # Тикеры фьючерсов Binance
 SYMBOL = [
@@ -13,17 +24,25 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
+# Подключение к PostgreSQL 
+ENGINE = create_engine(f'postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}')
+
 # Открытие соединения, создание базы данных
 def on_open(ws):
-    create_db()
     for ticker in SYMBOL:
         ticker = ticker.upper()
         print(f'{ticker} Online')
 
 # Закрытие соединения, удаление базы данных
 def on_close(ws):
-    drop_db()
     print('Offline')
+
+# Алерт в Telegram
+def send_message(message) -> str:
+    return requests.get(
+        'https://api.telegram.org/bot{}/sendMessage'.format(TELETOKEN), 
+        params=dict(chat_id=CHAT_ID, text=message)
+    )
 
 # Обработка потока Binance
 def on_message(ws, df):
@@ -62,9 +81,11 @@ def on_message(ws, df):
     one_percent_bull = min_price_last_hour + (max_price_last_hour / 100)
 
     if last_price == one_percent_bear:
-        print('Sell')
+        send_message(f'{db_ticker} SELL')
+        print(f'{db_ticker} Sell')
     elif last_price == one_percent_bull:
-        print('Buy')
+        send_message(f'{db_ticker} BUY')
+        print(f'{db_ticker} Buy')
     else:
         print(f'Price {db_ticker.upper()}: {last_price} \n Buy: {one_percent_bull} \n Sell: {one_percent_bear} \n')
 

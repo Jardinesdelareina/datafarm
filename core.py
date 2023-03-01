@@ -32,10 +32,6 @@ def on_open(ws):
     for ticker in SYMBOL:
         ticker = ticker.upper()
         print(f'{ticker} Online')
-    
-# Закрытие соединения
-def on_close(ws):
-    print('Offline')
 
 # Алерт в Telegram
 def send_message(message) -> str:
@@ -44,8 +40,16 @@ def send_message(message) -> str:
         params=dict(chat_id=CHAT_ID, text=message)
     )
 
+# Состояние соединения
+socket_connection = True
+
+# Функция закрытия соединения
+def bot_off():
+    global socket_connection
+    socket_connection = False
+
 # Обработка потока Binance
-def on_message(ws, df):
+def on_message(ws, df, socket_connection=True):
     df = pd.DataFrame([json.loads(df)])
     df = df.loc[:, ['s', 'E', 'p']]
     df.columns = ['symbol', 'time', 'price']
@@ -86,6 +90,8 @@ def on_message(ws, df):
     elif last_price == one_percent_bull:
         send_message(f'{db_ticker} BUY')
         print(f'{db_ticker} Buy')
+    elif socket_connection == False:
+        ws.close()
     else:
         print(f'Price {db_ticker.upper()}: {last_price} \n Buy: {one_percent_bull} \n Sell: {one_percent_bear} \n')
 
@@ -94,7 +100,6 @@ def main(socket):
     ws = websocket.WebSocketApp(
         socket, 
         on_open=on_open, 
-        on_close=on_close, 
         on_message=on_message
     )
     ws.run_forever()

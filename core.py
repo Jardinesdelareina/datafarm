@@ -70,11 +70,11 @@ def on_message(ws, df):
         return order_volume
 
     if last_price == one_percent_bear:
-        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='BUY', type='MARKET', quantity=calculate_quantity())
+        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='SELL', type='MARKET', quantity=calculate_quantity())
         send_message(f'{db_ticker} SELL')
         print(f'{db_ticker} Sell')
     elif last_price == one_percent_bull:
-        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='SELL', type='MARKET', quantity=calculate_quantity())
+        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='BUY', type='MARKET', quantity=calculate_quantity())
         send_message(f'{db_ticker} BUY')
         print(f'{db_ticker} Buy')
     else:

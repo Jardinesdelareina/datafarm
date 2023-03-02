@@ -2,13 +2,14 @@ import websocket, json, threading, requests
 import pandas as pd
 from sqlalchemy import text
 from config import *
-from binance.helpers import round_step_size
+
+QNTY = 20
 
 # Тикеры фьючерсов Binance
 SYMBOL = [
-    'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
+    #'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
     #'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
-    #'vetusdt', 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
+    'vetusdt', #'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
 ]
 
 # Перебор тикеров для подписки на поток
@@ -58,27 +59,21 @@ def on_message(ws, df):
         min_price_last_hour = pd.DataFrame(min_price_last_hour.fetchall()) 
         min_price_last_hour = min_price_last_hour.iloc[-1].values
 
-    one_percent_bear = max_price_last_hour - (max_price_last_hour / 1000)
-    one_percent_bull = min_price_last_hour + (max_price_last_hour / 1000)
+    signal_bear = max_price_last_hour - (max_price_last_hour / 1000)
+    signal_bull = min_price_last_hour + (max_price_last_hour / 1000)
 
-    def calculate_quantity(last_price) -> float:
-        symbol_info = CLIENT.get_symbol_info(db_ticker.upper())
-        step_size = symbol_info.get('filters')[1]['stepSize']
-        QNTY = 20
-        order_volume = QNTY / last_price
-        order_volume = round_step_size(order_volume, step_size)
-        return order_volume
+    def calculate_quantity():
+        return QNTY / last_price
 
-    if last_price == one_percent_bear:
-        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='SELL', type='MARKET', quantity=calculate_quantity())
+    if last_price > signal_bear:
+        CLIENT.new_order(symbol=db_ticker.upper(), side='SELL', type='MARKET', quantity=calculate_quantity())
         send_message(f'{db_ticker} SELL')
         print(f'{db_ticker} Sell')
-    elif last_price == one_percent_bull:
-        CLIENT.futures_create_order(symbol=db_ticker.upper(), side='BUY', type='MARKET', quantity=calculate_quantity())
+    elif last_price == signal_bull:
         send_message(f'{db_ticker} BUY')
         print(f'{db_ticker} Buy')
     else:
-        print(f'Price {db_ticker.upper()}: {last_price} \n Buy: {one_percent_bull} \n Sell: {one_percent_bear} \n')
+        print(f'Price {db_ticker.upper()}: {last_price} \n Buy: {signal_bull} \n Sell: {signal_bear} \n')
 
 # Точка подключения websocket для потока
 def main(socket):

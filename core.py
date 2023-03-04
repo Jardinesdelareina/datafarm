@@ -17,13 +17,6 @@ SYMBOL = [
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
 
-# Алерт в Telegram
-def send_message(message) -> str:
-    return requests.get(
-        'https://api.telegram.org/bot{}/sendMessage'.format(TELETOKEN), 
-        params=dict(chat_id=CHAT_ID, text=message)
-    )
-
 # Открытие соединения
 def on_open(ws):
     for ticker in SYMBOL:
@@ -63,6 +56,13 @@ def on_message(ws, df):
 
     signal_bear = max_price_last_hour - (max_price_last_hour / 100)
     signal_bull = min_price_last_hour + (max_price_last_hour / 100)
+
+    # Алерт в Telegram
+    def send_message(message) -> str:
+        return requests.get(
+            'https://api.telegram.org/bot{}/sendMessage'.format(TELETOKEN), 
+            params=dict(chat_id=CHAT_ID, text=message)
+        )
 
     # Расчет объема ордера в зависимости от размера шага тикера
     def calculate_quantity():

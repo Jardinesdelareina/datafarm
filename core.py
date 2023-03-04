@@ -74,15 +74,32 @@ def on_message(ws, df):
                 order_volume = round_step_size(order_volume, step_size)
                 print(order_volume)
                 return order_volume
+    
+    # Размещение ордеров
+    def place_order(order_type):
+        if order_type == 'BUY':
+            order = CLIENT.new_order(
+                symbol=db_ticker, 
+                side='BUY', 
+                type='MARKET', 
+                quantity=calculate_quantity()
+            )
+            print(json.dumps(order, indent=4, sort_keys=True))
+            send_message(f'{db_ticker} Buy')
+        elif order_type == 'SELL':
+            order = CLIENT.new_order(
+                symbol=db_ticker, 
+                side='SELL', 
+                type='MARKET', 
+                quantity=calculate_quantity()
+            )
+            print(json.dumps(order, indent=4, sort_keys=True))
+            send_message(f'{db_ticker} Sell')
 
     if last_price == signal_bull:
-        CLIENT.new_order(symbol=db_ticker, side='BUY', type='MARKET', quantity=calculate_quantity())
-        send_message(f'{db_ticker} SELL')
-        print(f'{db_ticker} Sell')
+        place_order('BUY')        
     elif last_price == signal_bear:
-        CLIENT.new_order(symbol=db_ticker, side='SELL', type='MARKET', quantity=calculate_quantity())
-        send_message(f'{db_ticker} BUY')
-        print(f'{db_ticker} Buy')
+        place_order('SELL')
     else:
         print(f'Price {db_ticker}: {last_price} \n Buy: {signal_bull} \n Sell: {signal_bear} \n')
 

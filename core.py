@@ -53,7 +53,7 @@ def on_message(ws, df):
     # Алерт в Telegram
     def send_message(message) -> str:
         return requests.get(
-            'https://api.telegram.org/bot{}/sendMessage'.format(TELETOKEN), 
+            f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
             params=dict(chat_id=CHAT_ID, text=message)
         )
 

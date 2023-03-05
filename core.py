@@ -1,27 +1,20 @@
 import websocket, json, threading, requests
 import pandas as pd
 from sqlalchemy import text
-from config import *
-from helpers import round_step_size
+from config import ENGINE, TELETOKEN, CHAT_ID, INFO, CLIENT
+from helpers import symbol_list, round_float, round_step_size
 
 # Объем ордера
 QNTY = 10
 
-# Тикеры фьючерсов Binance
-SYMBOL = [
-    #'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
-    #'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
-    'vetusdt', #'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
-]
-
 # Перебор тикеров для подписки на поток
-SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in SYMBOL]
+SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in symbol_list]
 
 # Открытие соединения
 def on_open(ws):
-    for ticker in SYMBOL:
-        ticker = ticker.upper()
-        print(f'{ticker} Online')
+    for symbol in symbol_list:
+        symbol = symbol.upper()
+        print(f'{symbol} Online')
 
 # Обработка потока Binance
 def on_message(ws, df):
@@ -54,8 +47,8 @@ def on_message(ws, df):
         min_price_last_hour = pd.DataFrame(min_price_last_hour.fetchall()) 
         min_price_last_hour = float(min_price_last_hour.iloc[-1].values)
 
-    signal_bear = max_price_last_hour - (max_price_last_hour / 100)
-    signal_bull = min_price_last_hour + (max_price_last_hour / 100)
+    signal_bull = round((min_price_last_hour + (min_price_last_hour / 100)), round_float(num=last_price))
+    signal_bear = round((max_price_last_hour - (max_price_last_hour / 100)), round_float(num=last_price))
 
     # Алерт в Telegram
     def send_message(message) -> str:
@@ -65,14 +58,12 @@ def on_message(ws, df):
         )
 
     # Расчет объема ордера в зависимости от размера шага тикера
-    def calculate_quantity():
-        INFO = CLIENT.exchange_info()
+    def calculate_quantity() -> float:
         for symbol in INFO['symbols']:
             if symbol['symbol'] == db_ticker:
                 step_size = symbol['filters'][2]['stepSize']
                 order_volume = QNTY / last_price
                 order_volume = round_step_size(order_volume, step_size)
-                print(order_volume)
                 return order_volume
     
     # Размещение ордеров
@@ -96,12 +87,13 @@ def on_message(ws, df):
             print(json.dumps(order, indent=4, sort_keys=True))
             send_message(f'{db_ticker} Sell')
 
+    # Торговая стратегия
     if last_price == signal_bull:
         place_order('BUY')        
     elif last_price == signal_bear:
         place_order('SELL')
     else:
-        print(f'Price {db_ticker}: {last_price} \n Buy: {signal_bull} \n Sell: {signal_bear} \n')
+        print(f'{db_ticker}: {last_price} \n Buy: {signal_bull} \n Sell: {signal_bear} \n')
 
 # Точка подключения websocket для потока
 def main(socket):

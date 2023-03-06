@@ -1,17 +1,9 @@
-from decimal import Decimal
-from typing import Union
-
 # Тикеры фьючерсов Binance
 symbol_list = [
     #'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
     #'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
     'vetusdt'#, 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
 ]
-
-# Округление qnty до определенного размера шага
-def round_step_size(quantity: Union[float, Decimal], step_size: Union[float, Decimal]) -> float:
-    quantity = Decimal(str(quantity))
-    return float(quantity - quantity % Decimal(str(step_size)))
 
 # Расчет количества знаков после запятой у числа типа float
 def round_float(num: float) -> int:

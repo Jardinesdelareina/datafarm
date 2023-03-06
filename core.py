@@ -1,14 +1,21 @@
 import websocket, json, threading, requests
 import pandas as pd
 from sqlalchemy import text
-from config import ENGINE, TELETOKEN, CHAT_ID, INFO, CLIENT
-from helpers import symbol_list, round_float, round_step_size
+from config import ENGINE, TELETOKEN, CHAT_ID
+from helpers import symbol_list, round_float
 
 # Объем ордера
 QNTY = 10
 
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in symbol_list]
+
+# Алерт в Telegram
+def send_message(message) -> str:
+    return requests.get(
+        f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
+        params=dict(chat_id=CHAT_ID, text=message)
+    )    
 
 # Открытие соединения
 def on_open(ws):
@@ -49,51 +56,11 @@ def on_message(ws, df):
 
     signal_bull = round((min_price_last_hour + (min_price_last_hour / 100)), round_float(num=last_price))
     signal_bear = round((max_price_last_hour - (max_price_last_hour / 100)), round_float(num=last_price))
-
-    # Алерт в Telegram
-    def send_message(message) -> str:
-        return requests.get(
-            f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
-            params=dict(chat_id=CHAT_ID, text=message)
-        )
-
-    # Расчет объема ордера в зависимости от размера шага тикера
-    def calculate_quantity() -> float:
-        for symbol in INFO['symbols']:
-            if symbol['symbol'] == db_ticker:
-                step_size = symbol['filters'][2]['stepSize']
-                order_volume = QNTY / last_price
-                order_volume = round_step_size(order_volume, step_size)
-                return order_volume
     
-    # Размещение ордеров
-    def place_order(order_type):
-        if order_type == 'BUY':
-            order = CLIENT.new_order(
-                symbol=db_ticker, 
-                side='BUY', 
-                type='MARKET', 
-                quantity=calculate_quantity()
-            )
-            print(json.dumps(order, indent=4, sort_keys=True))
-            send_message(f'{db_ticker} Buy')
-        elif order_type == 'SELL':
-            order = CLIENT.new_order(
-                symbol=db_ticker, 
-                side='SELL', 
-                type='MARKET', 
-                quantity=calculate_quantity()
-            )
-            print(json.dumps(order, indent=4, sort_keys=True))
-            send_message(f'{db_ticker} Sell')
-
-    # Торговая стратегия
     if last_price == signal_bull:
-        place_order('BUY')        
+        send_message(f'{db_ticker}: {last_price} Buy')
     elif last_price == signal_bear:
-        place_order('SELL')
-    else:
-        print(f'{db_ticker}: {last_price} \n Buy: {signal_bull} \n Sell: {signal_bear} \n')
+        send_message(f'{db_ticker}: {last_price} Sell')
 
 # Точка подключения websocket для потока
 def main(socket):

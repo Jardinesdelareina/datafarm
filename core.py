@@ -4,27 +4,27 @@ from sqlalchemy import text
 from config import ENGINE, TELETOKEN, CHAT_ID
 from helpers import symbol_list, round_float
 
-# Объем ордера
-QNTY = 10
-
 # Перебор тикеров для подписки на поток
 SOCKETS = [f'wss://stream.binance.com:9443/ws/{symbol}@trade' for symbol in symbol_list]
 
-# Алерт в Telegram
+
 def send_message(message) -> str:
+    """ Уведомления в Telegram """
     return requests.get(
         f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
         params=dict(chat_id=CHAT_ID, text=message)
     )    
 
-# Открытие соединения
+
 def on_open(ws):
+    """ Открытие соединения """
     for symbol in symbol_list:
         symbol = symbol.upper()
         print(f'{symbol} Online')
 
-# Обработка потока Binance
+
 def on_message(ws, df):
+    """ Обработка потока Binance """
     df = pd.DataFrame([json.loads(df)])
     df = df.loc[:, ['s', 'E', 'p']]
     df.columns = ['symbol', 'time', 'price']
@@ -58,18 +58,26 @@ def on_message(ws, df):
     signal_bear = round((max_price_last_hour - (max_price_last_hour / 100)), round_float(num=last_price))
     
     if last_price == signal_bull:
-        send_message(f'{db_ticker}: {last_price} Buy')
+        message = f'{db_ticker}: {last_price} Buy'
+        send_message(message)
+        print(message)
     elif last_price == signal_bear:
-        send_message(f'{db_ticker}: {last_price} Sell')
+        message = f'{db_ticker}: {last_price} Sell'
+        send_message(message)
+        print(message)
+    else:
+        print(f'{db_ticker}: {last_price}')
 
-# Точка подключения websocket для потока
+
 def main(socket):
+    """ Точка подключения websocket для потока """
     ws = websocket.WebSocketApp(
         socket, 
         on_open=on_open, 
         on_message=on_message
     )
     ws.run_forever()
+
 
 # Разделение потоков: один тикер - один поток
 threads = []

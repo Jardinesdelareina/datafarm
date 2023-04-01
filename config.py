@@ -1,6 +1,6 @@
-import environs, json
+import environs
 from sqlalchemy import create_engine
-from binance.um_futures import UMFutures
+from binance.client import Client
 
 env = environs.Env()
 env.read_env('.env')
@@ -18,8 +18,6 @@ TELETOKEN = env('TELETOKEN')
 CHAT_ID = env('CHAT_ID')
 
 # Binance API
-CLIENT = UMFutures(env('API_KEY'), env('SECRET_KEY'))
-GENERAL_BALANCE = round(float(CLIENT.balance()[6]['balance']), 2)
-AVAILABLE_BALANCE = round(float(CLIENT.balance()[6]['availableBalance']), 2)
-INFO = CLIENT.exchange_info()
-#print(json.dumps(INFO, indent=4, sort_keys=True))
+CLIENT = Client(env('API_KEY'), env('SECRET_KEY'), {'verify': True, 'timeout': 20})
+ASSET_BALANCE = CLIENT.get_asset_balance(asset='USDT')
+BALANCE_FREE = round(float(ASSET_BALANCE.get('free')), 1)

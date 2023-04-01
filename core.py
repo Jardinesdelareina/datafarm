@@ -5,9 +5,10 @@ from config import CLIENT, ENGINE, TELETOKEN, CHAT_ID
 from sqlalchemy import text
 
 SYMBOL = 'XRPUSDT'
+open_position = False
 
 
-def send_message(message) -> str:
+def send_message(message: str) -> str:
     """ Уведомления в Telegram 
     """
     return requests.get(
@@ -37,49 +38,61 @@ def get_data(stream):
     df.columns = ['symbol', 'time', 'price']
     df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
     df.price = df.price.astype(float)
-    db_ticker = df.symbol.iloc[0]
+    db_ticker = df.symbol.iloc[0].lower()
     df.to_sql(name=f'{db_ticker.lower()}', con=ENGINE, if_exists='append', index=False)
-    with ENGINE.connect() as conn:
-        # Последняя цена тикера
-        last_price = conn.execute(text(
-            f"SELECT price FROM {db_ticker.lower()} ORDER BY time DESC LIMIT 1"
-        ))
-        last_price = pd.DataFrame(last_price.fetchall())
-        last_price = float(last_price.iloc[-1].values)
 
-        # Минимальная цена тикера за последний час
-        min_price_last_hour = conn.execute(text(
-            f"SELECT MIN(price) FROM {db_ticker.lower()} WHERE time > NOW() - INTERVAL '1 HOUR'"
-        ))
-        min_price_last_hour = pd.DataFrame(min_price_last_hour.fetchall()) 
-        min_price_last_hour = float(min_price_last_hour.iloc[-1].values)
+    def execute_query(query: str):
+        """ Оборачивание запросов к базе данных
 
-        # Максимальная цена тикера за последний час
-        max_price_last_hour = conn.execute(text(
-            f"SELECT MAX(price) FROM {db_ticker.lower()} WHERE time > NOW() - INTERVAL '1 HOUR'"
-        ))
-        max_price_last_hour = pd.DataFrame(max_price_last_hour.fetchall()) 
-        max_price_last_hour = float(max_price_last_hour.iloc[-1].values)
+            query (str): SQL запрос
+            return (Pandas DataFrame): Результат выполнения запроса 
+        """
+        with ENGINE.connect() as conn:
+            result = conn.execute(text(query))
+            df_result = pd.DataFrame(result.fetchall())
+            value = float(df_result.iloc[-1].values)
+            return value
 
-    signal_bull = round((min_price_last_hour + (min_price_last_hour / 100)), round_float(num=last_price))
-    signal_bear = round((max_price_last_hour - (max_price_last_hour / 100)), round_float(num=last_price))
+    # Последняя цена тикера  
+    last_price = execute_query(
+        f"SELECT price FROM {db_ticker} ORDER BY time DESC LIMIT 1"
+    )
+
+    # Минимальная цена тикера за последний час
+    min_price_last_hour = execute_query(
+        f"SELECT MIN(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+    )
+
+    # Максимальная цена тикера за последний час
+    max_price_last_hour = execute_query(
+        f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'")
+
+    signal_buy = round((min_price_last_hour + (min_price_last_hour / 100)), round_float(num=last_price))
+    signal_sell = round((max_price_last_hour - (max_price_last_hour / 100)), round_float(num=last_price))
     
-    if last_price == signal_bull:
-        message = f'{db_ticker}: {last_price} Buy'
-        send_message(message)
-        print(message)
-    elif last_price == signal_bear:
-        message = f'{db_ticker}: {last_price} Sell'
-        send_message(message)
-        print(message)
-    else:
-        print(
-            f'''
-                {db_ticker}: {last_price}
-                BUY: {signal_bull}
-                SELL: {signal_bear}
-            '''
-        )
+    if not open_position:
+        if last_price == signal_buy:
+            message = f'{db_ticker.upper()}: {last_price} Buy'
+            send_message(message)
+            print(message)
+            open_position == True
+        else:
+            print(f'''
+                {db_ticker.upper()}: {last_price}
+                BUY: {signal_buy}
+                ''')
+    if open_position:
+        if last_price == signal_sell:
+            message = f'{db_ticker.upper()}: {last_price} Sell'
+            send_message(message)
+            print(message)
+            open_position == False
+        else:
+            print(f'''
+                {db_ticker.upper()}: {last_price} 
+                SELL: {signal_sell}
+                '''
+            )
 
 
 async def main(symbol):

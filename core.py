@@ -4,6 +4,12 @@ from binance import BinanceSocketManager
 from config import CLIENT, ENGINE, TELETOKEN, CHAT_ID
 from sqlalchemy import text
 
+symbol_list = [
+    'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
+    'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
+    'vetusdt', 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
+]
+
 
 def send_message(message: str) -> str:
     """ Уведомления в Telegram 
@@ -27,20 +33,16 @@ def round_float(num: float) -> int:
     return counter
 
 
-def top_coin():
-    """ Фильтр тикеров по максимальному процентному изменению
-    """
-    all_tickers = pd.DataFrame(CLIENT.get_ticker())
-    usdt = all_tickers[all_tickers.symbol.str.contains('USDT')]
-    work = usdt[~((usdt.symbol.str.contains('UP')) | (usdt.symbol.str.contains('DOWN')))]
-    top_coin = work[work.priceChangePercent == work.priceChangePercent.max()]
-    top_coin = top_coin.symbol.values[0]
-    return top_coin
+
+open_position = False
+last_signal = None
+last_log = None
 
 
 def get_data(stream):
     """ Получение данных с биржи
     """
+    global open_position, last_signal, last_log
     df = pd.DataFrame([stream])
     df = df.loc[:,['s', 'E', 'p']]
     df.columns = ['symbol', 'time', 'price']
@@ -73,17 +75,15 @@ def get_data(stream):
 
     # Максимальная цена тикера за последний час
     max_price_last_hour = execute_query(
-        f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'")
+        f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+    )
 
     # Цена выше минимума за последний час на 1%
-    signal_buy = round((min_price_last_hour + (min_price_last_hour / 1000)), round_float(num=last_price))
+    signal_buy = round((min_price_last_hour + (min_price_last_hour / 100)), round_float(num=last_price))
 
     # Цена ниже максимума за последний час на 0.5%
     signal_sell = round((max_price_last_hour - (max_price_last_hour / 500)), round_float(num=last_price))
     
-    open_position = False
-    last_signal = None
-    last_print = None
     if not open_position:
         if last_price > signal_buy:
             message = f'{db_ticker.upper()}: {last_price} Buy'
@@ -93,10 +93,10 @@ def get_data(stream):
                 last_signal = message
             open_position = True
         else:
-            last_log = f'{db_ticker.upper()}: {last_price} BUY: {signal_buy}'
-            if last_log != last_print:
+            message = f'{db_ticker.upper()}: {last_price} BUY: {signal_buy}'
+            if message != last_log:
                 print(last_log)
-                last_log = last_print
+                last_log = message
     if open_position:
         if last_price < signal_sell:
             message = f'{db_ticker.upper()}: {last_price} Sell'
@@ -106,10 +106,11 @@ def get_data(stream):
                 last_signal = message
             open_position = False
         else:
-            last_log = f'{db_ticker.upper()}: {last_price} SELL: {signal_buy}'
-            if last_log != last_print:
+            message = f'{db_ticker.upper()}: {last_price} SELL: {signal_buy}'
+            if message != last_log:
                 print(last_log)
-                last_log = last_print
+                last_log = message
+
 
 async def main(symbol):
     """ Подключение к сокетам
@@ -123,9 +124,14 @@ async def main(symbol):
                 get_data(res)
 
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+async def start():
+    tasks = []
+    for symbol in symbol_list:
+        tasks.append(asyncio.create_task(main(symbol)))
+    await asyncio.gather(*tasks)
+
+
 try:
-    asyncio.run(main(top_coin()))
+    asyncio.run(start())
 except KeyboardInterrupt:
     print('Stop')

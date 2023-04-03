@@ -14,7 +14,7 @@ symbol_link = InlineKeyboardButton(text='LINK', callback_data='LINKUSDT')
 symbol_sol = InlineKeyboardButton(text='SOL', callback_data='SOLUSDT')
 symbol_near = InlineKeyboardButton(text='NEAR', callback_data='NEARUSDT')
 symbol_uni = InlineKeyboardButton(text='UNI', callback_data='UNIUSDT')
-symbol_all = InlineKeyboardButton(text='ALL', callback_data='ALL')
+symbol_all = InlineKeyboardButton(text='Все тикеры', callback_data='ALL')
 symbol_kb.row(symbol_btc, symbol_eth, symbol_bnb, symbol_xrp,)\
         .row(symbol_ada, symbol_dot, symbol_matic, symbol_avax,)\
         .row(symbol_link, symbol_sol, symbol_near, symbol_uni)\

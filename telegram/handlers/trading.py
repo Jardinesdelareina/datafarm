@@ -1,11 +1,10 @@
-import threading, asyncio
+import threading
 from aiogram import types, Dispatcher
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from concurrent.futures import ThreadPoolExecutor
-from datafarm.core import symbol_list
+from datafarm.core import symbol_list, start_all_bots, start_bot, bot_off
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *
@@ -121,19 +120,15 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
             if data['start'] == 'start':
 
                 if symbol == 'ALL':
-                    """ bots = [Datafarm(symbol, qnty=data['qnty']) for symbol in symbol_list]
-                    with ThreadPoolExecutor() as executor:
-                        state_data = executor.map(asyncio.run, [bot.main() for bot in bots]) """
-                    print('all')
+                    def work():
+                        start_all_bots(data['qnty'])
+                    thread_work = threading.Thread(target=work)
+                    thread_work.start()
                 else:
-                    """ state_data = Datafarm(data['symbol'], data['qnty'])
-                    state_data.main() """
-                    print('no all')
-
-                """ def work():
-                    state_data.main()
-                thread_work = threading.Thread(target=work)
-                thread_work.start() """
+                    def work():
+                        start_bot(data['symbol'], data['qnty'])
+                    thread_work = threading.Thread(target=work)
+                    thread_work.start()
 
                 await TradeStateGroup.next()
                 STATE_START = 'Datafarm начал свою работу'
@@ -179,7 +174,7 @@ async def stop_callback(callback: types.CallbackQuery, state: FSMContext):
                 text=STATE_CONTINUE,
             )
         elif data['stop'] == 'stop':
-            #Datafarm(data['symbol'], data['qnty']).stop()
+            bot_off()
             STATE_STOP = 'Datafarm закончил свою работу'
             print('Datafarm Stop')
             await bot.send_message(

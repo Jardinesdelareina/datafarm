@@ -12,6 +12,34 @@ symbol_list = [
     'ADAUSDT', 'SOLUSDT', 'MATICUSDT', 'UNIUSDT', 'NEARUSDT', 'AVAX'
 ]
 
+online = True
+
+def bot_off():
+    """ Остановка алгоритма
+    """
+    global online
+    online = False
+
+
+def start_all_bots(qnty=15):
+    """ Запуск алгоритма извне по целому списку тикеров
+    """
+    global online
+    online = True
+    bots = [Datafarm(symbol, qnty) for symbol in symbol_list]
+    with ThreadPoolExecutor() as executor:
+        return executor.map(asyncio.run, [bot.main() for bot in bots])
+    
+
+def start_bot(symbol, qnty=15):
+    """ Запуск алгоритма извне по одному выбранному тикеру
+    """
+    global online
+    online = True
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    asyncio.run(Datafarm(symbol, qnty).main())
+
 
 class Datafarm:
     """ Базовый класс, содержащий инфраструктуру обработки данных, торговую стратегию, 
@@ -37,17 +65,12 @@ class Datafarm:
 
             ** __last_signal и __last_log служат для предотвращения дублирования уведомлений
             при поступающих через вебсокеты идентичных данных.
-
-            running (bool): Состояние цикла while в методе main. 
-                            Если True - данные через API Binance непрерывно поступают,
-                            если False - поступление данных прекращается, работа алгоритма останавливается
         """
         self.symbol = symbol
         self.qnty = qnty
         self.__open_position = False
         self.__last_signal = None
         self.__last_log = None
-        self.running = True
 
 
     def send_message(self, message: str) -> str:
@@ -136,7 +159,7 @@ class Datafarm:
             print(json.dumps(order, indent=4, sort_keys=True))
 
 
-    def execute_query(query: str):
+    def execute_query(self, query: str):
         """ Обработка запросов к базе данных
 
             query (str): SQL запрос
@@ -226,30 +249,19 @@ class Datafarm:
                     self.__last_log = message
 
 
-    def stop(self):
-        """ Остановка выполнения программы
-        """
-        self.running = False
-
-
     async def main(self):
         """ Подключение к потоку Binance через вебсокеты
 
             Поток: 'wss://stream.binance.com:9443/ws/{self.symbol}@trade'
         """
+        global online
+        print(online)
+        online = True
         bm = BinanceSocketManager(client=CLIENT)
         ts = bm.trade_socket(self.symbol)
         async with ts as tscm:
-            while self.running:
+            while online:
                 res = await tscm.recv()
                 if res:
                     self.get_data(res)
                 await asyncio.sleep(0)
-
-
-
-""" # Создание объектов класса, где атрибут - элемент списка, и запуск созданных объектов многопоточно
-bots = [Datafarm(symbol, qnty=15) for symbol in symbol_list]
-with ThreadPoolExecutor() as executor:
-    results = executor.map(asyncio.run, [bot.main() for bot in bots]) 
- """

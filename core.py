@@ -188,7 +188,6 @@ class Datafarm:
                     print('Покупка невозможна')
                 message = f'{self.symbol}: {self.last_price} Buy'
                 if message != self.__last_signal:
-                    self.send_message(message)
                     print(message)
                     self.__last_signal = message
             else:
@@ -205,7 +204,6 @@ class Datafarm:
                     print('Продажа невозможна')
                 message = f'{self.symbol}: {self.last_price} Sell'
                 if message != self.__last_signal:
-                    self.send_message(message)
                     print(message)
                     self.__last_signal = message
             else:

@@ -4,7 +4,8 @@ from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from sqlalchemy import text
 from concurrent.futures import ThreadPoolExecutor
-from config import CLIENT, ENGINE, TELETOKEN, CHAT_ID
+from .config_binance import CLIENT, ENGINE
+from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 symbol_list = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'LINKUSDT',
@@ -70,9 +71,22 @@ class Datafarm:
                 counter += 1
         return counter
 
-    
+
+    @staticmethod
+    def get_balance(ticker: str) -> float:
+        """ Баланс определенной криптовалюты на спотовом кошельке Binance
+
+            ticker (str): Тикер криптовалюты (базовой, без котируемой, в формате 'BTC', 'ETH' и т.д.)
+            return (float): Количество заданной криптовалюты
+        """
+        asset_balance = CLIENT.get_asset_balance(asset=ticker)
+        balance_free = float(asset_balance.get('free'))
+        return balance_free
+
+
     def calculate_quantity(self) -> float:
-        """ Расчет объема ордера """
+        """ Расчет объема ордера 
+        """
         symbol_info = CLIENT.get_symbol_info(self.symbol)
         step_size = symbol_info.get('filters')[1]['stepSize']
         order_volume = self.qnty / self.last_price
@@ -122,6 +136,19 @@ class Datafarm:
             print(json.dumps(order, indent=4, sort_keys=True))
 
 
+    def execute_query(query: str):
+        """ Обработка запросов к базе данных
+
+            query (str): SQL запрос
+            return (Pandas DataFrame): Результат выполнения запроса 
+        """
+        with ENGINE.connect() as conn:
+            result = conn.execute(text(query))
+            df_result = pd.DataFrame(result.fetchall())
+            value = float(df_result.iloc[-1].values)
+            return value
+
+
     def get_data(self, stream):
         """ Получение данных с биржи, сохранение в базу данных, чтение, обработка данных
             и преобразование их в торговые сигналы
@@ -139,32 +166,18 @@ class Datafarm:
         db_ticker = df.symbol.iloc[0].lower()
         df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
 
-
-        def execute_query(query: str):
-            """ Обработка запросов к базе данных
-
-                query (str): SQL запрос
-                return (Pandas DataFrame): Результат выполнения запроса 
-            """
-            with ENGINE.connect() as conn:
-                result = conn.execute(text(query))
-                df_result = pd.DataFrame(result.fetchall())
-                value = float(df_result.iloc[-1].values)
-                return value
-
-
         # Последняя цена тикера  
-        self.last_price = execute_query(
+        self.last_price = self.execute_query(
             f"SELECT price FROM {db_ticker} ORDER BY time DESC LIMIT 1"
         )
 
         # Минимальная цена тикера за последний час
-        min_price_last_hour = execute_query(
+        min_price_last_hour = self.execute_query(
             f"SELECT MIN(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
         )
 
         # Максимальная цена тикера за последний час
-        max_price_last_hour = execute_query(
+        max_price_last_hour = self.execute_query(
             f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
         )
 
@@ -234,7 +247,9 @@ class Datafarm:
                 await asyncio.sleep(0)
 
 
+""" 
 # Создание объектов класса, где атрибут - элемент списка, и запуск созданных объектов многопоточно
 bots = [Datafarm(symbol, qnty=15) for symbol in symbol_list]
 with ThreadPoolExecutor() as executor:
-    results = executor.map(asyncio.run, [bot.main() for bot in bots])
+    results = executor.map(asyncio.run, [bot.main() for bot in bots]) 
+"""

@@ -7,9 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from config import CLIENT, ENGINE, TELETOKEN, CHAT_ID
 
 symbol_list = [
-    'btcusdt', 'ethusdt', 'bnbusdt', 'xrpusdt', 'dotusdt', 'linkusdt', 'xtzusdt', 
-    'adausdt', 'solusdt', 'maticusdt', 'avaxusdt', 'uniusdt', 'trxusdt', 'xlmusdt',
-    'vetusdt', 'axsusdt', 'zilusdt', 'dogeusdt', 'nearusdt', 'aaveusdt', 'ltcusdt',
+    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'LINKUSDT',
+    'ADAUSDT', 'SOLUSDT', 'MATICUSDT', 'UNIUSDT', 'AVAXUSDT', 'NEARUSDT'
 ]
 
 
@@ -18,10 +17,12 @@ class Datafarm:
         построенную на основе полученных данных и логику взаимодействия с API Binance.
     """
 
-    def __init__(self, symbol):
+    def __init__(self, symbol, qnty=15):
         """ Конструктор класса Datafarm
 
-            symbol (str): Название тикера, которое передается в атрибуте класса
+            symbol (str): Тикер криптовалютной пары
+
+            qnty (float): Объем ордера, по-умолчанию 15
 
             __open_position (bool): Состояние, в котором находится алгоритм. 
                                     Если нет открытой позиции, значение атрибута - False,
@@ -41,6 +42,7 @@ class Datafarm:
                             если False - поступление данных прекращается, работа алгоритма останавливается
         """
         self.symbol = symbol
+        self.qnty = qnty
         self.__open_position = False
         self.__last_signal = None
         self.__last_log = None
@@ -108,7 +110,7 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.open_position = False
+            self.__open_position = False
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
                 self.round_float(num=self.last_price)
@@ -135,10 +137,11 @@ class Datafarm:
         df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
         df.price = df.price.astype(float)
         db_ticker = df.symbol.iloc[0].lower()
-        df.to_sql(name=f'{db_ticker.lower()}', con=ENGINE, if_exists='append', index=False)
+        df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
+
 
         def execute_query(query: str):
-            """ Обработка запросов к базе данных.
+            """ Обработка запросов к базе данных
 
                 query (str): SQL запрос
                 return (Pandas DataFrame): Результат выполнения запроса 
@@ -148,6 +151,7 @@ class Datafarm:
                 df_result = pd.DataFrame(result.fetchall())
                 value = float(df_result.iloc[-1].values)
                 return value
+
 
         # Последняя цена тикера  
         self.last_price = execute_query(
@@ -178,30 +182,34 @@ class Datafarm:
 
         if not self.__open_position:
             if self.last_price > signal_buy:
-                self.place_order('BUY')
-                message = f'{db_ticker.upper()}: {self.last_price} Buy'
+                try:
+                    self.place_order('BUY')
+                except:
+                    print('Покупка невозможна')
+                message = f'{self.symbol}: {self.last_price} Buy'
                 if message != self.__last_signal:
                     self.send_message(message)
                     print(message)
                     self.__last_signal = message
-                self.__open_position = True
             else:
-                message = f'{db_ticker.upper()}: {self.last_price} BUY: {signal_buy}'
+                message = f'{self.symbol}: {self.last_price} BUY: {signal_buy}'
                 if message != self.__last_log:
                     print(self.__last_log)
                     self.__last_log = message
 
         if self.__open_position:
             if self.last_price < signal_sell:
-                self.place_order('SELL')
-                message = f'{db_ticker.upper()}: {self.last_price} Sell'
+                try:
+                    self.place_order('SELL')
+                except:
+                    print('Продажа невозможна')
+                message = f'{self.symbol}: {self.last_price} Sell'
                 if message != self.__last_signal:
                     self.send_message(message)
                     print(message)
                     self.__last_signal = message
-                self.__open_position = False
             else:
-                message = f'{db_ticker.upper()}: {self.last_price} SELL: {signal_buy}'
+                message = f'{self.symbol}: {self.last_price} SELL: {signal_buy}'
                 if message != self.__last_log:
                     print(self.__last_log)
                     self.__last_log = message
@@ -229,6 +237,6 @@ class Datafarm:
 
 
 # Создание объектов класса, где атрибут - элемент списка, и запуск созданных объектов многопоточно
-bots = [Datafarm(symbol) for symbol in symbol_list]
+bots = [Datafarm(symbol, qnty=15) for symbol in symbol_list]
 with ThreadPoolExecutor() as executor:
     results = executor.map(asyncio.run, [bot.main() for bot in bots])

@@ -9,7 +9,7 @@ from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 symbol_list = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'LINKUSDT',
-    'ADAUSDT', 'SOLUSDT', 'MATICUSDT', 'UNIUSDT', 'AVAXUSDT', 'NEARUSDT'
+    'ADAUSDT', 'SOLUSDT', 'MATICUSDT', 'UNIUSDT', 'NEARUSDT', 'AVAX'
 ]
 
 
@@ -247,9 +247,9 @@ class Datafarm:
                 await asyncio.sleep(0)
 
 
-""" 
-# Создание объектов класса, где атрибут - элемент списка, и запуск созданных объектов многопоточно
+
+""" # Создание объектов класса, где атрибут - элемент списка, и запуск созданных объектов многопоточно
 bots = [Datafarm(symbol, qnty=15) for symbol in symbol_list]
 with ThreadPoolExecutor() as executor:
     results = executor.map(asyncio.run, [bot.main() for bot in bots]) 
-"""
+ """

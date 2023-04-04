@@ -31,7 +31,7 @@ def start_all_bots(qnty=15):
         return executor.map(asyncio.run, [bot.main() for bot in bots])
     
 
-def start_bot(symbol, qnty=15):
+def start_single_bot(symbol, qnty=15):
     """ Запуск алгоритма извне по одному выбранному тикеру
     """
     global online
@@ -255,7 +255,6 @@ class Datafarm:
             Поток: 'wss://stream.binance.com:9443/ws/{self.symbol}@trade'
         """
         global online
-        print(online)
         online = True
         bm = BinanceSocketManager(client=CLIENT)
         ts = bm.trade_socket(self.symbol)

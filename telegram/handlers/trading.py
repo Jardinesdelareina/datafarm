@@ -4,7 +4,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from datafarm.core import symbol_list, start_all_bots, start_bot, bot_off
+from datafarm.core import symbol_list, start_all_bots, start_single_bot, bot_off
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *
@@ -126,7 +126,7 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
                     thread_work.start()
                 else:
                     def work():
-                        start_bot(data['symbol'], data['qnty'])
+                        start_single_bot(data['symbol'], data['qnty'])
                     thread_work = threading.Thread(target=work)
                     thread_work.start()
 

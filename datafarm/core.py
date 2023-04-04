@@ -14,21 +14,12 @@ symbol_list = [
 
 online = True
 
+
 def bot_off():
     """ Остановка алгоритма
     """
     global online
     online = False
-
-
-def start_all_bots(qnty=15):
-    """ Запуск алгоритма извне по целому списку тикеров
-    """
-    global online
-    online = True
-    bots = [Datafarm(symbol, qnty) for symbol in symbol_list]
-    with ThreadPoolExecutor() as executor:
-        return executor.map(asyncio.run, [bot.main() for bot in bots])
     
 
 def start_single_bot(symbol, qnty=15):

@@ -3,7 +3,6 @@ import pandas as pd
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from sqlalchemy import text
-from concurrent.futures import ThreadPoolExecutor
 from .config_binance import CLIENT, ENGINE
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
@@ -46,7 +45,7 @@ class Datafarm:
 
             __open_position (bool): Состояние, в котором находится алгоритм. 
                                     Если нет открытой позиции, значение атрибута - False,
-                                    если произошло событие signal_buy - True
+                                    если произошло событие signal_buy - True.
 
             __last_signal (str): Текстовое сообщение о торговом сигнале, передаваемое как 
                                 уведомление в Telegram и в терминал.

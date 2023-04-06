@@ -1,4 +1,4 @@
-import asyncio, requests, json
+import asyncio, requests
 import pandas as pd
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
@@ -128,7 +128,6 @@ class Datafarm:
             message = f'{self.symbol} \n Buy \n {self.buy_price}'
             self.send_message(message)
             print(message)
-            print(json.dumps(order, indent=4, sort_keys=True))
 
         elif order_side == 'SELL':
             order = CLIENT.create_order(
@@ -142,11 +141,10 @@ class Datafarm:
                 float(order.get('fills')[0]['price']), 
                 self.round_float(num=self.last_price)
             )
-            result = round((self.sell_price - self.buy_price * self.calculate_quantity()), 2)
+            result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
             message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
             self.send_message(message)
             print(message)
-            print(json.dumps(order, indent=4, sort_keys=True))
 
 
     def execute_query(self, query: str):
@@ -171,38 +169,39 @@ class Datafarm:
             time (datetime): Время поступления данных
             price (float): Значение цены тикера
         """
-        df = pd.DataFrame([stream])
-        df = df.loc[:,['s', 'E', 'p']]
-        df.columns = ['symbol', 'time', 'price']
-        df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
-        df.price = df.price.astype(float)
-        db_ticker = df.symbol.iloc[0].lower()
-        df.to_sql(name=f'{db_ticker}', con=ENGINE, if_exists='append', index=False)
+        try:
+            df = pd.DataFrame([stream])
+            df = df.loc[:,['s', 'E', 'p']]
+            df.columns = ['symbol', 'time', 'price']
+            df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
+            df.price = df.price.astype(float)
+            self.db_ticker = df.symbol.str.lower().iloc[0]
+            df.to_sql(name=f'{self.db_ticker}', con=ENGINE, if_exists='append', index=False)
+        except KeyError:
+            pass
 
         # Последняя цена тикера  
         self.last_price = self.execute_query(
-            f"SELECT price FROM {db_ticker} ORDER BY time DESC LIMIT 1"
+            f"SELECT price FROM {self.db_ticker} ORDER BY time DESC LIMIT 1"
         )
 
-        # Минимальная цена тикера за последний час
+        # Минимальная цена тикера за период
         min_price_last_hour = self.execute_query(
-            f"SELECT MIN(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+            f"SELECT MIN(price) FROM {self.db_ticker} WHERE time > NOW() - INTERVAL '15 MINUTE'"
         )
 
-        # Максимальная цена тикера за последний час
+        # Максимальная цена тикера за период
         max_price_last_hour = self.execute_query(
-            f"SELECT MAX(price) FROM {db_ticker} WHERE time > NOW() - INTERVAL '1 HOUR'"
+            f"SELECT MAX(price) FROM {self.db_ticker} WHERE time > NOW() - INTERVAL '15 MINUTE'"
         )
 
-        # Цена выше минимума за последний час на 1%
         signal_buy = round(
-            (min_price_last_hour + (min_price_last_hour * 0.01)), 
+            (min_price_last_hour + (min_price_last_hour * 0.001)), 
             self.round_float(num=self.last_price)
         )
 
-        # Цена ниже максимума за последний час на 1%
         signal_sell = round(
-            (max_price_last_hour - (max_price_last_hour * 0.01)), 
+            (max_price_last_hour - (max_price_last_hour * 0.001)), 
             self.round_float(num=self.last_price)
         )
 
@@ -212,7 +211,7 @@ class Datafarm:
                     self.place_order('BUY')
                 except:
                     print('Покупка невозможна')
-                message = f'{self.symbol}: {self.last_price} Buy'
+                message = f'{self.symbol} Buy'
                 if message != self.__last_signal:
                     print(message)
                     self.__last_signal = message
@@ -228,12 +227,12 @@ class Datafarm:
                     self.place_order('SELL')
                 except:
                     print('Продажа невозможна')
-                message = f'{self.symbol}: {self.last_price} Sell'
+                message = f'{self.symbol} Sell'
                 if message != self.__last_signal:
                     print(message)
                     self.__last_signal = message
             else:
-                message = f'{self.symbol}: {self.last_price} SELL: {signal_buy}'
+                message = f'{self.symbol}: {self.last_price} SELL: {signal_sell}'
                 if message != self.__last_log:
                     print(self.__last_log)
                     self.__last_log = message

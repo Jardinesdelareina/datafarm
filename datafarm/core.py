@@ -240,13 +240,11 @@ class Datafarm:
 
     async def main(self):
         """ Подключение к потоку Binance через вебсокеты
-
-            Поток: 'wss://stream.binance.com:9443/ws/{self.symbol}@trade'
         """
         global online
         online = True
         bm = BinanceSocketManager(client=CLIENT)
-        ts = bm.trade_socket(self.symbol)
+        ts = bm.symbol_mark_price_socket(self.symbol, fast=False)
         async with ts as tscm:
             while online:
                 res = await tscm.recv()

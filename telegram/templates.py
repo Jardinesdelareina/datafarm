@@ -1,4 +1,4 @@
-from datafarm.core import symbol_list, Datafarm
+from datafarm.utils import get_balance_ticker
 
 START = '''
 <b>Главное меню</b>
@@ -40,25 +40,13 @@ HELP = '''
 <em>Обращаем ваше внимание, что для сокращения размера комиссий необходимо иметь на балансе некоторое количество BNB.</em>
 '''
 
-balance_usdt = round(Datafarm.get_balance('USDT'), 1)
-BALANCE = f'''
-Здесь вы можете отслеживать состояние вашего криптовалютного портфеля:
-
-USDT: <b>{balance_usdt}</b>\n
-'''
-for ticker in symbol_list:
-    ticker_name = ticker.replace('USDT', '')
-    balance = Datafarm.get_balance(ticker_name)
-    if balance > 0:
-        BALANCE += f'{ticker_name}: <b>{balance}</b>\n'
-
 STATE_START = '''
 Давайте приступим. 
 Выберите криптовалютную пару, которую вы бы хотели подключить к алгоритму. 
 '''
 STATE_QNTY = f'''
 <em>
-Баланс USDT: <b>{balance_usdt}</b>
+Баланс USDT: <b>{get_balance_ticker('USDT')}</b>
 Введите объем в USDT:
 </em>
 '''
@@ -69,7 +57,7 @@ STATE_QNTY_TYPE_ERROR = '''
 '''
 STATE_QNTY_MAX_VALUE_ERROR = f'''
 <em>
-Объем превышает размер депозита. Пожалуйста, введите сумму меньше <b>{balance_usdt}</b> USDT
+Объем превышает размер депозита. Пожалуйста, введите сумму меньше <b>{get_balance_ticker('USDT')}</b> USDT
 </em>
 '''
 STATE_QNTY_MIN_VALUE_ERROR = f'''

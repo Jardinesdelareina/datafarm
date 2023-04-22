@@ -1,9 +1,8 @@
-import asyncio, requests
+import asyncio, requests, os
 import pandas as pd
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
-from sqlalchemy import text
-from .config_binance import CLIENT, ENGINE
+from datafarm.config_binance import CLIENT
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 symbol_list = [
@@ -28,13 +27,17 @@ def start_single_bot(symbol, qnty=15):
     online = True
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    asyncio.run(Datafarm(symbol, qnty).main())
+    asyncio.run(Datafarm(symbol, qnty).socket_stream())
 
 
 class Datafarm:
     """ Базовый класс, содержащий инфраструктуру обработки данных, торговую стратегию, 
         построенную на основе полученных данных и логику взаимодействия с API Binance.
     """
+
+    PERCENT_OPEN = 0.01
+    TIME_RANGE = 6
+
 
     def __init__(self, symbol, qnty=15):
         """ Конструктор класса Datafarm
@@ -56,8 +59,9 @@ class Datafarm:
             ** __last_signal и __last_log служат для предотвращения дублирования уведомлений
             при поступающих через вебсокеты идентичных данных.
         """
-        self.symbol = symbol
+        self.symbol = symbol.upper()
         self.qnty = qnty
+        self.data_file = f'{self.symbol}.csv'
         self.__open_position = False
         self.__last_signal = None
         self.__last_log = None
@@ -69,32 +73,7 @@ class Datafarm:
         return requests.get(
             f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
             params=dict(chat_id=CHAT_ID, text=message)
-        )    
-
-
-    def round_float(self, num: float) -> int:
-        """ Расчет количества знаков после запятой у числа типа float 
-        """
-        num_str = str(num)
-        counter = 0
-        for i in num_str[::-1]:
-            if i == '.':
-                break
-            else:
-                counter += 1
-        return counter
-
-
-    @staticmethod
-    def get_balance(ticker: str) -> float:
-        """ Баланс определенной криптовалюты на спотовом кошельке Binance
-
-            ticker (str): Тикер криптовалюты (базовой, без котируемой, в формате 'BTC', 'ETH' и т.д.)
-            return (float): Количество заданной криптовалюты
-        """
-        asset_balance = CLIENT.get_asset_balance(asset=ticker)
-        balance_free = float(asset_balance.get('free'))
-        return balance_free
+        )
 
 
     def calculate_quantity(self) -> float:
@@ -147,63 +126,35 @@ class Datafarm:
             print(message)
 
 
-    def execute_query(self, query: str):
-        """ Обработка запросов к базе данных
+    def create_frame(self, stream):
+        """ Получение данных, сохранение их в виде таблицы в файл формата .csv
+            чтение файла с данными и построение стратегии на основе полученных данных
 
-            query (str): SQL запрос
-            return (Pandas DataFrame): Результат выполнения запроса 
+            Структура таблицы файла .csv:
+            
+            Symbol (str): Название тикера
+            Time (datetime): Время поступления данных
+            Price (float): Значение цены тикера
+            stream (dict): Данные, поступающие через вебсокеты
         """
-        with ENGINE.connect() as conn:
-            result = conn.execute(text(query))
-            df_result = pd.DataFrame(result.fetchall())
-            value = float(df_result.iloc[-1].values)
-            return value
+        df = pd.DataFrame(stream['data'], index=[0])
+        df = df.loc[:,['s', 'E', 'p']]
+        df.columns = ['Symbol', 'Time', 'Price']
+        df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
+        df.Price = df.Price.astype(float)
+        with open(self.data_file, 'a') as f:
+            if os.stat(self.data_file).st_size == 0:
+                df.to_csv(f, mode='a', header=True, index=False)
+            else:
+                df.to_csv(f, mode='a', header=False, index=False)
+        df_csv = pd.read_csv(f'{self.symbol}.csv')
+        df_csv.Time = pd.to_datetime(df_csv.Time)
+        self.last_price = df_csv.Price.iloc[-1]
+        time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        
+        signal_buy = (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_OPEN))
+        signal_sell = (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_OPEN))
 
-
-    def get_data(self, stream):
-        """ Получение данных с биржи, сохранение в базу данных, чтение, обработка данных
-            и преобразование их в торговые сигналы
-
-            Структура таблицы базы данных:
-            symbol (str): Название тикера
-            time (datetime): Время поступления данных
-            price (float): Значение цены тикера
-        """
-        try:
-            df = pd.DataFrame([stream])
-            df = df.loc[:,['s', 'E', 'p']]
-            df.columns = ['symbol', 'time', 'price']
-            df.time = pd.to_datetime(df.time, unit='ms', utc=True, infer_datetime_format=True)
-            df.price = df.price.astype(float)
-            self.db_ticker = df.symbol.str.lower().iloc[0]
-            df.to_sql(name=f'{self.db_ticker}', con=ENGINE, if_exists='append', index=False)
-        except KeyError:
-            pass
-
-        # Последняя цена тикера  
-        self.last_price = self.execute_query(
-            f"SELECT price FROM {self.db_ticker} ORDER BY time DESC LIMIT 1"
-        )
-
-        # Минимальная цена тикера за период
-        min_price_last_hour = self.execute_query(
-            f"SELECT MIN(price) FROM {self.db_ticker} WHERE time > NOW() - INTERVAL '15 MINUTE'"
-        )
-
-        # Максимальная цена тикера за период
-        max_price_last_hour = self.execute_query(
-            f"SELECT MAX(price) FROM {self.db_ticker} WHERE time > NOW() - INTERVAL '15 MINUTE'"
-        )
-
-        signal_buy = round(
-            (min_price_last_hour + (min_price_last_hour * 0.001)), 
-            self.round_float(num=self.last_price)
-        )
-
-        signal_sell = round(
-            (max_price_last_hour - (max_price_last_hour * 0.001)), 
-            self.round_float(num=self.last_price)
-        )
 
         if not self.__open_position:
             if self.last_price > signal_buy:
@@ -238,7 +189,7 @@ class Datafarm:
                     self.__last_log = message
 
 
-    async def main(self):
+    async def socket_stream(self):
         """ Подключение к потоку Binance через вебсокеты
         """
         global online
@@ -249,5 +200,5 @@ class Datafarm:
             while online:
                 res = await tscm.recv()
                 if res:
-                    self.get_data(res)
+                    self.create_frame(res)
                 await asyncio.sleep(0)

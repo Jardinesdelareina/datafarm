@@ -20,7 +20,7 @@ def bot_off():
     online = False
     
 
-def start_single_bot(symbol, qnty=15):
+def start_single_bot(symbol, qnty):
     """ Запуск алгоритма извне по одному выбранному тикеру
     """
     global online
@@ -202,3 +202,9 @@ class Datafarm:
                 if res:
                     self.create_frame(res)
                 await asyncio.sleep(0)
+            if not online:
+                if os.path.exists(self.data_file):
+                    os.remove(self.data_file)
+                    print('Файл с данными торгов удален')
+                else:
+                    print('Файл с данными торгов не был найден')

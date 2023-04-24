@@ -46,7 +46,6 @@ STATE_START = '''
 '''
 STATE_QNTY = f'''
 <em>
-Баланс USDT: <b>{get_balance_ticker('USDT')}</b>
 Введите объем в USDT:
 </em>
 '''

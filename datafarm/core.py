@@ -3,12 +3,8 @@ import pandas as pd
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
+from datafarm.utils import round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
-
-symbol_list = [
-    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'LINKUSDT',
-    'ADAUSDT', 'SOLUSDT', 'MATICUSDT', 'UNIUSDT', 'NEARUSDT', 'AVAX'
-]
 
 online = True
 
@@ -35,8 +31,9 @@ class Datafarm:
         построенную на основе полученных данных и логику взаимодействия с API Binance.
     """
 
-    PERCENT_OPEN = 0.01
-    TIME_RANGE = 6
+    PERCENT_BUY = 0.01
+    PERCENT_SELL = 0.007
+    TIME_RANGE = 1
 
 
     def __init__(self, symbol, qnty=15):
@@ -84,6 +81,19 @@ class Datafarm:
         order_volume = self.qnty / self.last_price
         order_volume = round_step_size(order_volume, step_size)
         return order_volume
+    
+
+    def round_float(self, num: float) -> int:
+        """ Расчет количества знаков после запятой у числа типа float 
+        """
+        num_str = str(num)
+        counter = 0
+        for i in num_str[::-1]:
+            if i == '.':
+                break
+            else:
+                counter += 1
+        return counter
 
 
     def place_order(self, order_side: str):
@@ -156,37 +166,38 @@ class Datafarm:
         signal_sell = (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_OPEN))
 
 
+        def report_signal(self, order_side):
+            """ Логирование сигнала
+            """
+            message = f'{self.symbol} {order_side}'
+            if message != self.__last_signal:
+                print(message)
+                self.__last_signal = message
+
+
+        def report_log(self, order_side):
+            """ Логирование ожидания сигнала
+            """
+            message = f'{self.symbol}: {self.last_price} {order_side}: {signal_buy}'
+            if message != self.__last_log:
+                print(self.__last_log)
+                self.__last_log = message
+
+
         if not self.__open_position:
-            if self.last_price > signal_buy:
-                try:
-                    self.place_order('BUY')
-                except:
-                    print('Покупка невозможна')
-                message = f'{self.symbol} Buy'
-                if message != self.__last_signal:
-                    print(message)
-                    self.__last_signal = message
+            if (self.last_price > signal_buy) and (self.last_price < (signal_buy * 0.001)):
+                self.place_order('BUY')
+                report_signal('BUY')
             else:
-                message = f'{self.symbol}: {self.last_price} BUY: {signal_buy}'
-                if message != self.__last_log:
-                    print(self.__last_log)
-                    self.__last_log = message
+                report_log('BUY')
 
         if self.__open_position:
-            if self.last_price < signal_sell:
-                try:
-                    self.place_order('SELL')
-                except:
-                    print('Продажа невозможна')
-                message = f'{self.symbol} Sell'
-                if message != self.__last_signal:
-                    print(message)
-                    self.__last_signal = message
+            if ((self.last_price < signal_sell) and (self.last_price > (signal_sell * 0.001))) \
+                or self.last_price < self.buy_price:
+                self.place_order('SELL')
+                report_signal('SELL')
             else:
-                message = f'{self.symbol}: {self.last_price} SELL: {signal_sell}'
-                if message != self.__last_log:
-                    print(self.__last_log)
-                    self.__last_log = message
+                report_log('SELL')
 
 
     async def socket_stream(self):

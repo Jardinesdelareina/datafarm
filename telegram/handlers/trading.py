@@ -4,8 +4,8 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from datafarm.core import symbol_list, start_single_bot, bot_off
-from datafarm.utils import get_balance_ticker
+from datafarm.core import start_single_bot, bot_off
+from datafarm.utils import symbol_list, get_balance_ticker
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *

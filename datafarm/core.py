@@ -3,13 +3,13 @@ import pandas as pd
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import round_float
+from datafarm.utils import round_list
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
 
 
-def bot_off():
+def bot_off() -> bool:
     """ Остановка алгоритма
     """
     global online
@@ -64,7 +64,7 @@ class Datafarm:
         self.__last_log = None
 
 
-    def send_message(self, message: str) -> str:
+    def send_message(self, message: str):
         """ Уведомления в Telegram 
         """
         return requests.get(
@@ -151,7 +151,7 @@ class Datafarm:
         df = df.loc[:,['s', 'E', 'p']]
         df.columns = ['Symbol', 'Time', 'Price']
         df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df.Price = df.Price.astype(float)
+        df.Price = round(df.Price.astype(float), round_list[f'{self.symbol}'])
         with open(self.data_file, 'a') as f:
             if os.stat(self.data_file).st_size == 0:
                 df.to_csv(f, mode='a', header=True, index=False)
@@ -162,11 +162,17 @@ class Datafarm:
         self.last_price = df_csv.Price.iloc[-1]
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
-        signal_buy = (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_OPEN))
-        signal_sell = (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_OPEN))
+        signal_buy = round(
+            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_BUY)),
+            self.round_float(num=self.last_price)
+        )
+        signal_sell = round(
+            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_SELL)),
+            self.round_float(num=self.last_price)
+        )
 
 
-        def report_signal(self, order_side):
+        def report_signal(order_side):
             """ Логирование сигнала
             """
             message = f'{self.symbol} {order_side}'
@@ -175,7 +181,7 @@ class Datafarm:
                 self.__last_signal = message
 
 
-        def report_log(self, order_side):
+        def report_log(order_side):
             """ Логирование ожидания сигнала
             """
             message = f'{self.symbol}: {self.last_price} {order_side}: {signal_buy}'

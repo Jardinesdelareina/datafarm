@@ -1,9 +1,11 @@
-import asyncio, requests, os
+import asyncio, requests, os, datetime
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import round_list
+from datafarm.utils import round_list, remove_file
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
@@ -206,6 +208,41 @@ class Datafarm:
                 report_log('SELL')
 
 
+    def report_graph(self):
+        time_now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        df = pd.read_csv(self.data_file) 
+        chart = go.Scatter(
+            x=df.Time,
+            y=df.Price,
+            mode='lines',
+            line=dict(width=1),
+            marker=dict(color='blue')
+        )
+        layout = go.Layout(
+            title='Тиковый график',
+            yaxis=dict(
+                title='Цена',
+                side='right',
+                showgrid=False,
+                zeroline=False
+            ),
+            xaxis=dict(
+                title='Время',
+                showgrid=False,
+                zeroline=False
+            ),
+            margin=gos.layout.Margin(
+                l=40,
+                r=0,
+                t=40,
+                b=30
+            )
+        )
+        data = [chart]
+        fig = go.Figure(data=data, layout=layout)
+        fig.write_image(f"report.png")
+
+
     async def socket_stream(self):
         """ Подключение к потоку Binance через вебсокеты
         """
@@ -220,8 +257,4 @@ class Datafarm:
                     self.create_frame(res)
                 await asyncio.sleep(0)
             if not online:
-                if os.path.exists(self.data_file):
-                    os.remove(self.data_file)
-                    print('Файл с данными торгов удален')
-                else:
-                    print('Файл с данными торгов не был найден')
+                remove_file(self.data_file)

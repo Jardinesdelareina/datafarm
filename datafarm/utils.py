@@ -1,3 +1,4 @@
+import os
 from datafarm.config_binance import CLIENT
 
 symbol_list = [
@@ -25,3 +26,11 @@ def get_balance_ticker(ticker: str) -> float:
     else:
         round_balance = 4
     return round(float(asset_balance.get('free')), round_balance)
+
+
+def remove_file(target_file):
+    if os.path.exists(target_file):
+        os.remove(target_file)
+        print(f'Файл {target_file} удален')
+    else:
+        print(f'Файл {target_file} не был найден')

@@ -1,11 +1,11 @@
-import threading, time
+import threading, os
 from aiogram import types, Dispatcher
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from datafarm.core import start_single_bot, bot_off
-from datafarm.utils import symbol_list, get_balance_ticker
+from datafarm.core import start_single_bot, bot_off, Datafarm
+from datafarm.utils import symbol_list, get_balance_ticker, remove_file
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *
@@ -49,7 +49,7 @@ async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
     """ Сохраняет тикер в стейт, предлагает список интервалов 
     """
     async with state.proxy() as data:
-        if callback.data in symbol_list or callback.data == 'ALL':
+        if callback.data in symbol_list:
             data['symbol'] = callback.data
             await TradeStateGroup.next()
             await bot.send_message(
@@ -144,14 +144,26 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
 async def manage_message(message: types.Message, state: FSMContext):
     """ Остановка алгоритма при вводе команды 'Стоп' 
     """
-    if message.text == 'Стоп':
-        STATE_STOP_MESSAGE = f'Вы действительно хотите остановить Datafarm?'
-        await bot.send_message(
-            chat_id=CHAT_ID, 
-            text=STATE_STOP_MESSAGE, 
-            reply_markup=stop_kb
-        )
-        await message.delete()
+    async with state.proxy() as data:
+        if message.text == 'Стоп':
+            STATE_STOP_MESSAGE = f'Вы действительно хотите остановить Datafarm?'
+            await bot.send_message(
+                chat_id=CHAT_ID, 
+                text=STATE_STOP_MESSAGE, 
+                reply_markup=stop_kb
+            )
+            await message.delete()
+        if message.text == 'Отчет':
+            report = Datafarm(data['symbol'], data['qnty'])
+            report.report_graph()
+            print('Отчет')
+            with open('report.png', 'rb') as photo:
+                await bot.send_photo(
+                    CHAT_ID, 
+                    photo=types.InputFile(photo), 
+                    caption='Последний отчет'
+                )
+            await message.delete()
 
 
 async def stop_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -175,6 +187,7 @@ async def stop_callback(callback: types.CallbackQuery, state: FSMContext):
                 text=STATE_STOP, 
                 reply_markup=main_kb
             )
+            remove_file('report.png')
             await state.finish()
 
 

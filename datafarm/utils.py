@@ -29,6 +29,8 @@ def get_balance_ticker(ticker: str) -> float:
 
 
 def remove_file(target_file):
+    """ Удаление файла
+    """
     if os.path.exists(target_file):
         os.remove(target_file)
         print(f'Файл {target_file} удален')

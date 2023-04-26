@@ -42,7 +42,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     if current_state is None:
         return
     await state.finish()
-    await bot.send_message(chat_id=CHAT_ID, text='Отменено')
+    await bot.send_message(chat_id=CHAT_ID, text='\U0001F519 Отменено')
 
 
 async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -90,6 +90,7 @@ async def qnty_message(message: types.Message, state: FSMContext):
                 text=STATE_QNTY_MIN_VALUE_ERROR, 
                 parse_mode="HTML"
             )
+            await TradeStateGroup.previous()
         elif get_balance_ticker('USDT') - quantity_float > 0:
             data['qnty'] = quantity_float
         else:
@@ -98,11 +99,12 @@ async def qnty_message(message: types.Message, state: FSMContext):
                 text=STATE_QNTY_MAX_VALUE_ERROR, 
                 parse_mode="HTML"
             )
+            await TradeStateGroup.previous()
         
         await TradeStateGroup.next()
         symbol = data['symbol']
         qnty = data['qnty']
-        STATE_RESULT = f'Тикер: {symbol} \n Объем USDT: {qnty}'
+        STATE_RESULT = f'\U00002705 Сверим данные \n Тикер: {symbol} \n Объем USDT: {qnty}'
         await bot.send_message(
             chat_id=CHAT_ID, 
             text=STATE_RESULT,
@@ -124,7 +126,7 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
                 thread_work.start()
 
                 await TradeStateGroup.next()
-                STATE_START = 'Datafarm начал свою работу'
+                STATE_START = '\U0001F3C1 Datafarm начал свою работу'
                 await callback.answer(STATE_START)
                 await bot.send_message(
                     chat_id=CHAT_ID, 
@@ -148,7 +150,7 @@ async def manage_message(message: types.Message, state: FSMContext):
     """
     async with state.proxy() as data:
         if message.text == 'Стоп':
-            STATE_STOP_MESSAGE = f'Вы действительно хотите остановить Datafarm?'
+            STATE_STOP_MESSAGE = f'\U0001F6D1 Вы действительно хотите остановить Datafarm?'
             await bot.send_message(
                 chat_id=CHAT_ID, 
                 text=STATE_STOP_MESSAGE, 
@@ -182,7 +184,7 @@ async def manage_message(message: types.Message, state: FSMContext):
                 await bot.send_photo(
                     CHAT_ID, 
                     photo=types.InputFile(photo), 
-                    caption='Последний отчет'
+                    caption='\U0001F4C3 Последний отчет'
                 )
             await message.delete()
 
@@ -194,14 +196,14 @@ async def stop_callback(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
         data['stop'] = callback.data
         if data['stop'] == 'continue':
-            STATE_CONTINUE = 'Datafarm продолжает работу' 
+            STATE_CONTINUE = '\U0001F503 Datafarm продолжает работу' 
             await bot.send_message(
                 chat_id=CHAT_ID, 
                 text=STATE_CONTINUE,
             )
         elif data['stop'] == 'stop':
             bot_off()
-            STATE_STOP = 'Datafarm закончил свою работу'
+            STATE_STOP = '\U0001F3C1 Datafarm закончил свою работу'
             print('Datafarm Stop')
             await bot.send_message(
                 chat_id=CHAT_ID, 

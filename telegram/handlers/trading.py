@@ -4,7 +4,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from datafarm.core import start_single_bot, bot_off, Datafarm
+from datafarm.core import start_single_bot, bot_off, bot_closed, Datafarm
 from datafarm.utils import symbol_list, get_balance_ticker, remove_file
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
@@ -142,7 +142,9 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
 
 
 async def manage_message(message: types.Message, state: FSMContext):
-    """ Остановка алгоритма при вводе команды 'Стоп' 
+    """ Остановка алгоритма при вводе команды 'Стоп',
+        продажа по рынку при вводе команды 'Продать',
+        вывод графического отчета о положении цены при вводе команды 'Отчет'
     """
     async with state.proxy() as data:
         if message.text == 'Стоп':
@@ -153,6 +155,25 @@ async def manage_message(message: types.Message, state: FSMContext):
                 reply_markup=stop_kb
             )
             await message.delete()
+        elif message.text == 'Продать':
+            trade_symbol = data['symbol']
+            try:
+                bot_closed()
+                print('Closed')
+                await TradeStateGroup.last()
+                STATE_CLOSED = f'Совершена ручная продажа по {trade_symbol}'
+                await bot.send_message(
+                    chat_id=CHAT_ID, 
+                    text=STATE_CLOSED
+                )
+                await message.delete()
+            except:
+                await bot.send_message(
+                    chat_id=CHAT_ID, 
+                    text=CLOSE_EXCEPTION,
+                    parse_mode="HTML"
+                )
+                await message.delete()
         if message.text == 'Отчет':
             report = Datafarm(data['symbol'], data['qnty'])
             report.report_graph()

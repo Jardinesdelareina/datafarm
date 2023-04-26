@@ -1,4 +1,4 @@
-import asyncio, requests, os, datetime
+import asyncio, requests, os
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.graph_objs as gos
@@ -9,6 +9,7 @@ from datafarm.utils import round_list, remove_file
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
+closed = False
 
 
 def bot_off() -> bool:
@@ -17,6 +18,13 @@ def bot_off() -> bool:
     global online
     online = False
     
+
+def bot_closed() -> bool:
+    """ Продажа по рынку
+    """
+    global closed
+    closed = True
+
 
 def start_single_bot(symbol, qnty):
     """ Запуск алгоритма извне по одному выбранному тикеру
@@ -33,8 +41,7 @@ class Datafarm:
         построенную на основе полученных данных и логику взаимодействия с API Binance.
     """
 
-    PERCENT_BUY = 0.01
-    PERCENT_SELL = 0.007
+    PERCENT_ORDER = 0.01
     TIME_RANGE = 1
 
 
@@ -149,6 +156,8 @@ class Datafarm:
             Price (float): Значение цены тикера
             stream (dict): Данные, поступающие через вебсокеты
         """
+        global closed
+
         df = pd.DataFrame(stream['data'], index=[0])
         df = df.loc[:,['s', 'E', 'p']]
         df.columns = ['Symbol', 'Time', 'Price']
@@ -165,11 +174,11 @@ class Datafarm:
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
         signal_buy = round(
-            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_BUY)),
+            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_ORDER)),
             self.round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_SELL)),
+            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_ORDER)),
             self.round_float(num=self.last_price)
         )
 
@@ -193,15 +202,18 @@ class Datafarm:
 
 
         if not self.__open_position:
-            if (self.last_price > signal_buy) and (self.last_price < (signal_buy * 0.001)):
+            if (self.last_price > signal_buy) \
+                and (self.last_price < (signal_buy + (signal_buy * 0.001))):
                 self.place_order('BUY')
                 report_signal('BUY')
             else:
                 report_log('BUY')
 
         if self.__open_position:
-            if ((self.last_price < signal_sell) and (self.last_price > (signal_sell * 0.001))) \
-                or self.last_price < self.buy_price:
+            if (self.last_price < signal_sell) \
+                and (self.last_price > ((signal_sell - (signal_sell * 0.001)))) \
+                or (self.last_price < time_period.Price.min()) \
+                or closed:
                 self.place_order('SELL')
                 report_signal('SELL')
             else:
@@ -209,34 +221,42 @@ class Datafarm:
 
 
     def report_graph(self):
-        time_now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        df = pd.read_csv(self.data_file) 
+        df_gph = pd.read_csv(self.data_file)
+        df_gph.Time = pd.to_datetime(df_gph.Time)
+        df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        signal_buy_report = round(
+            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_ORDER)),
+            self.round_float(num=df_gph.Price.iloc[-1])
+        )
+        signal_sell_report = round(
+            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_ORDER)),
+            self.round_float(num=df_gph.Price.iloc[-1])
+        )
+        
         chart = go.Scatter(
-            x=df.Time,
-            y=df.Price,
-            mode='lines',
-            line=dict(width=1),
+            x=df_gph.Time, 
+            y=df_gph.Price, 
+            mode='lines', 
+            line=dict(width=1), 
             marker=dict(color='blue')
         )
         layout = go.Layout(
-            title='Тиковый график',
-            yaxis=dict(
-                title='Цена',
-                side='right',
-                showgrid=False,
-                zeroline=False
-            ),
-            xaxis=dict(
-                title='Время',
-                showgrid=False,
-                zeroline=False
-            ),
-            margin=gos.layout.Margin(
-                l=40,
-                r=0,
-                t=40,
-                b=30
-            )
+            title=self.symbol,
+            yaxis=dict(title='Цена', side='right', showgrid=False, zeroline=False),
+            xaxis=dict(title='Время', showgrid=False, zeroline=False),
+            shapes=[
+                dict(
+                    type='line',
+                    yref='y',
+                    y0=signal_buy_report if not self.__open_position else signal_sell_report,
+                    y1=signal_buy_report if not self.__open_position else signal_sell_report,
+                    xref='paper',
+                    x0=0,
+                    x1=1,
+                    line=dict(color='green' if not self.__open_position else 'red'),
+                )
+            ],
+            margin=gos.layout.Margin(l=40, r=0, t=40,b=30)
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
@@ -247,7 +267,6 @@ class Datafarm:
         """ Подключение к потоку Binance через вебсокеты
         """
         global online
-        online = True
         bm = BinanceSocketManager(client=CLIENT)
         ts = bm.symbol_mark_price_socket(self.symbol, fast=False)
         async with ts as tscm:

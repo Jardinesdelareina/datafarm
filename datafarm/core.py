@@ -45,8 +45,8 @@ class Datafarm:
     OPEN_POSITION = False
 
     # Процент дистанции от экстремума
-    PERCENT_BUY = 0.002
-    PERCENT_SELL = 0.001
+    PERCENT_BUY = 0.01
+    PERCENT_SELL = 0.007
 
     # Рабочий временной диапазон
     TIME_RANGE = 1
@@ -147,6 +147,7 @@ class Datafarm:
         """
         global closed
 
+        # Запись
         df = pd.DataFrame(stream['data'], index=[0])
         df = df.loc[:,['s', 'E', 'p']]
         df.columns = ['Symbol', 'Time', 'Price']
@@ -157,6 +158,8 @@ class Datafarm:
                 df.to_csv(f, mode='a', header=True, index=False)
             else:
                 df.to_csv(f, mode='a', header=False, index=False)
+
+        # Чтение
         df_csv = pd.read_csv(f'{self.symbol}.csv')
         df_csv.Time = pd.to_datetime(df_csv.Time)
         self.last_price = df_csv.Price.iloc[-1]
@@ -193,65 +196,38 @@ class Datafarm:
 
         if not self.OPEN_POSITION:
             if self.last_price > signal_buy:
-                #self.place_order('BUY')
-                report_signal('BUY')
+                self.place_order('BUY')
                 remove_file(self.data_file)
+                report_signal('BUY')
             else:
                 report_log('BUY')
 
         if self.OPEN_POSITION:
             if (self.last_price < signal_sell) or closed:
-                #self.place_order('SELL')
-                report_signal('SELL')
+                self.place_order('SELL')
                 remove_file(self.data_file)
+                report_signal('SELL')
             else:
                 report_log('SELL')
 
 
     def report_graph(self):
         df_gph = pd.read_csv(self.data_file)
-        df_gph.Time = pd.to_datetime(df_gph.Time)
-        df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
-        last_price_report = df_gph.Price.iloc[-1]
-        signal_buy_report = round(
-            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_BUY)),
-            round_float(num=last_price_report)
-        )
-        signal_sell_report = round(
-            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_SELL)),
-            round_float(num=last_price_report)
-        )
-        signal_line = signal_buy_report if not self.OPEN_POSITION else signal_sell_report
-        signal_color = 'green' if not self.OPEN_POSITION else 'red'
-        print(self.OPEN_POSITION)
         chart = go.Scatter(
             x=df_gph.Time, 
-            y=df_gph.Price, 
+            y=df_gph.Price,
             mode='lines', 
-            line=dict(width=1), 
+            line=dict(width=2), 
             marker=dict(color='blue')
         )
         layout = go.Layout(
             title=self.symbol,
             yaxis=dict(side='right', showgrid=False, zeroline=False),
             xaxis=dict(showgrid=False, zeroline=False),
-            shapes=[
-                dict(
-                    type='line',
-                    yref='y',
-                    y0=signal_line,
-                    y1=signal_line,
-                    xref='paper',
-                    x0=0,
-                    x1=1,
-                    line=dict(color=signal_color),
-                )
-            ],
-            margin=gos.layout.Margin(l=40, r=0, t=40, b=30)
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
-        fig.write_image(f"report.png")
+        fig.write_image('report.png')
 
 
     async def socket_stream(self):

@@ -5,7 +5,7 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import round_list, remove_file
+from datafarm.utils import round_list, remove_file, round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
@@ -41,7 +41,14 @@ class Datafarm:
         построенную на основе полученных данных и логику взаимодействия с API Binance.
     """
 
-    PERCENT_ORDER = 0.01
+    # Наличие открытой позиции в рынке
+    OPEN_POSITION = False
+
+    # Процент дистанции от экстремума
+    PERCENT_BUY = 0.002
+    PERCENT_SELL = 0.001
+
+    # Рабочий временной диапазон
     TIME_RANGE = 1
 
 
@@ -51,10 +58,6 @@ class Datafarm:
             symbol (str): Тикер криптовалютной пары
 
             qnty (float): Объем ордера, по-умолчанию 15
-
-            __open_position (bool): Состояние, в котором находится алгоритм. 
-                                    Если нет открытой позиции, значение атрибута - False,
-                                    если произошло событие signal_buy - True.
 
             __last_signal (str): Текстовое сообщение о торговом сигнале, передаваемое как 
                                 уведомление в Telegram и в терминал.
@@ -68,7 +71,6 @@ class Datafarm:
         self.symbol = symbol.upper()
         self.qnty = qnty
         self.data_file = f'{self.symbol}.csv'
-        self.__open_position = False
         self.__last_signal = None
         self.__last_log = None
 
@@ -90,19 +92,6 @@ class Datafarm:
         order_volume = self.qnty / self.last_price
         order_volume = round_step_size(order_volume, step_size)
         return order_volume
-    
-
-    def round_float(self, num: float) -> int:
-        """ Расчет количества знаков после запятой у числа типа float 
-        """
-        num_str = str(num)
-        counter = 0
-        for i in num_str[::-1]:
-            if i == '.':
-                break
-            else:
-                counter += 1
-        return counter
 
 
     def place_order(self, order_side: str):
@@ -118,10 +107,10 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.__open_position = True
+            self.OPEN_POSITION = True
             self.buy_price = round(
                 float(order.get('fills')[0]['price']), 
-                self.round_float(num=self.last_price)
+                round_float(num=self.last_price)
             )
             message = f'{self.symbol} \n Buy \n {self.buy_price}'
             self.send_message(message)
@@ -134,10 +123,10 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.__open_position = False
+            self.OPEN_POSITION = False
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
-                self.round_float(num=self.last_price)
+                round_float(num=self.last_price)
             )
             result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
             message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
@@ -174,12 +163,12 @@ class Datafarm:
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
         signal_buy = round(
-            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_ORDER)),
-            self.round_float(num=self.last_price)
+            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_BUY)),
+            round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_ORDER)),
-            self.round_float(num=self.last_price)
+            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_SELL)),
+            round_float(num=self.last_price)
         )
 
 
@@ -195,27 +184,26 @@ class Datafarm:
         def report_log(order_side):
             """ Логирование ожидания сигнала
             """
-            message = f'{self.symbol}: {self.last_price} {order_side}: {signal_buy}'
+            signal = signal_buy if not self.OPEN_POSITION else signal_sell
+            message = f'{self.symbol}: {self.last_price} {order_side}: {signal}'
             if message != self.__last_log:
-                print(self.__last_log)
+                print(message)
                 self.__last_log = message
 
 
-        if not self.__open_position:
-            if (self.last_price > signal_buy) \
-                and (self.last_price < (signal_buy + (signal_buy * 0.001))):
-                self.place_order('BUY')
+        if not self.OPEN_POSITION:
+            if self.last_price > signal_buy:
+                #self.place_order('BUY')
                 report_signal('BUY')
+                remove_file(self.data_file)
             else:
                 report_log('BUY')
 
-        if self.__open_position:
-            if (self.last_price < signal_sell) \
-                and (self.last_price > ((signal_sell - (signal_sell * 0.001)))) \
-                or (self.last_price < time_period.Price.min()) \
-                or closed:
-                self.place_order('SELL')
+        if self.OPEN_POSITION:
+            if (self.last_price < signal_sell) or closed:
+                #self.place_order('SELL')
                 report_signal('SELL')
+                remove_file(self.data_file)
             else:
                 report_log('SELL')
 
@@ -224,15 +212,18 @@ class Datafarm:
         df_gph = pd.read_csv(self.data_file)
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        last_price_report = df_gph.Price.iloc[-1]
         signal_buy_report = round(
-            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_ORDER)),
-            self.round_float(num=df_gph.Price.iloc[-1])
+            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_BUY)),
+            round_float(num=last_price_report)
         )
         signal_sell_report = round(
-            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_ORDER)),
-            self.round_float(num=df_gph.Price.iloc[-1])
+            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_SELL)),
+            round_float(num=last_price_report)
         )
-        
+        signal_line = signal_buy_report if not self.OPEN_POSITION else signal_sell_report
+        signal_color = 'green' if not self.OPEN_POSITION else 'red'
+        print(self.OPEN_POSITION)
         chart = go.Scatter(
             x=df_gph.Time, 
             y=df_gph.Price, 
@@ -242,21 +233,21 @@ class Datafarm:
         )
         layout = go.Layout(
             title=self.symbol,
-            yaxis=dict(title='Цена', side='right', showgrid=False, zeroline=False),
-            xaxis=dict(title='Время', showgrid=False, zeroline=False),
+            yaxis=dict(side='right', showgrid=False, zeroline=False),
+            xaxis=dict(showgrid=False, zeroline=False),
             shapes=[
                 dict(
                     type='line',
                     yref='y',
-                    y0=signal_buy_report if not self.__open_position else signal_sell_report,
-                    y1=signal_buy_report if not self.__open_position else signal_sell_report,
+                    y0=signal_line,
+                    y1=signal_line,
                     xref='paper',
                     x0=0,
                     x1=1,
-                    line=dict(color='green' if not self.__open_position else 'red'),
+                    line=dict(color=signal_color),
                 )
             ],
-            margin=gos.layout.Margin(l=40, r=0, t=40,b=30)
+            margin=gos.layout.Margin(l=40, r=0, t=40, b=30)
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)

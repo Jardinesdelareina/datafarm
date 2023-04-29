@@ -1,4 +1,6 @@
-import asyncio, requests, os
+import os
+import requests
+import asyncio
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.graph_objs as gos
@@ -37,9 +39,6 @@ def start_single_bot(symbol, qnty):
 
 
 class Datafarm:
-    """ Базовый класс, содержащий инфраструктуру обработки данных, торговую стратегию, 
-        построенную на основе полученных данных и логику взаимодействия с API Binance.
-    """
 
     # Наличие открытой позиции в рынке
     OPEN_POSITION = False
@@ -107,7 +106,7 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.OPEN_POSITION = True
+            self.__class__.OPEN_POSITION = True
             self.buy_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -123,7 +122,7 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.OPEN_POSITION = False
+            self.__class__.OPEN_POSITION = False
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -135,7 +134,7 @@ class Datafarm:
 
 
     def create_frame(self, stream):
-        """ Получение данных, сохранение их в виде таблицы в файл формата .csv
+        """ Получение данных, сохранение их в виде таблицы в файл формата .csv,
             чтение файла с данными и построение стратегии на основе полученных данных
 
             Структура таблицы файла .csv:
@@ -187,14 +186,14 @@ class Datafarm:
         def report_log(order_side):
             """ Логирование ожидания сигнала
             """
-            signal = signal_buy if not self.OPEN_POSITION else signal_sell
+            signal = signal_buy if not self.__class__.OPEN_POSITION else signal_sell
             message = f'{self.symbol}: {self.last_price} {order_side}: {signal}'
             if message != self.__last_log:
                 print(message)
                 self.__last_log = message
 
 
-        if not self.OPEN_POSITION:
+        if not self.__class__.OPEN_POSITION:
             if self.last_price > signal_buy:
                 self.place_order('BUY')
                 remove_file(self.data_file)
@@ -202,7 +201,7 @@ class Datafarm:
             else:
                 report_log('BUY')
 
-        if self.OPEN_POSITION:
+        if self.__class__.OPEN_POSITION:
             if (self.last_price < signal_sell) or closed:
                 self.place_order('SELL')
                 remove_file(self.data_file)
@@ -213,6 +212,17 @@ class Datafarm:
 
     def report_graph(self):
         df_gph = pd.read_csv(self.data_file)
+        df_gph.Time = pd.to_datetime(df_gph.Time)
+        df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        signal_buy_report = round(
+            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_BUY)),
+            round_float(num=df_gph.Price.iloc[-1])
+        )
+        signal_sell_report = round(
+            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_SELL)),
+            round_float(num=df_gph.Price.iloc[-1])
+        )
+        signal_line = signal_buy_report if not self.__class__.OPEN_POSITION else signal_sell_report
         chart = go.Scatter(
             x=df_gph.Time, 
             y=df_gph.Price,
@@ -224,10 +234,23 @@ class Datafarm:
             title=self.symbol,
             yaxis=dict(side='right', showgrid=False, zeroline=False),
             xaxis=dict(showgrid=False, zeroline=False),
+            shapes=[
+                dict(
+                    type='line',
+                    yref='y',
+                    y0=signal_line,
+                    y1=signal_line,
+                    xref='paper',
+                    x0=0,
+                    x1=1,
+                    line=dict(color='green' if not self.__class__.OPEN_POSITION else 'red'),
+                )
+            ],
+            margin=gos.layout.Margin(l=40, r=0, t=40, b=30)
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
-        fig.write_image('report.png')
+        fig.write_image(f"report.png")
 
 
     async def socket_stream(self):

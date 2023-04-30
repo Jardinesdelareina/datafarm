@@ -202,7 +202,7 @@ class Datafarm:
                 report_log('BUY')
 
         if self.__class__.OPEN_POSITION:
-            if (self.last_price < signal_sell) or closed:
+            if self.last_price < signal_sell:
                 self.place_order('SELL')
                 remove_file(self.data_file)
                 report_signal('SELL')

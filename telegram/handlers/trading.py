@@ -104,10 +104,11 @@ async def qnty_message(message: types.Message, state: FSMContext):
         await TradeStateGroup.next()
         symbol = data['symbol']
         qnty = data['qnty']
-        STATE_RESULT = f'\U00002705 Сверим данные \n Тикер: {symbol} \n Объем USDT: {qnty}'
+        STATE_RESULT = f'\U00002705 Сверим данные \n Тикер: <b>{symbol}</b> \n Объем USDT: <b>{qnty}</b>'
         await bot.send_message(
             chat_id=CHAT_ID, 
             text=STATE_RESULT,
+            parse_mode="HTML",
             reply_markup=start_kb
         )
 
@@ -157,25 +158,6 @@ async def manage_message(message: types.Message, state: FSMContext):
                 reply_markup=stop_kb
             )
             await message.delete()
-        elif message.text == 'Продать':
-            trade_symbol = data['symbol']
-            try:
-                bot_closed()
-                print('Closed')
-                await TradeStateGroup.last()
-                STATE_CLOSED = f'Совершена ручная продажа по {trade_symbol}'
-                await bot.send_message(
-                    chat_id=CHAT_ID, 
-                    text=STATE_CLOSED
-                )
-                await message.delete()
-            except:
-                await bot.send_message(
-                    chat_id=CHAT_ID, 
-                    text=CLOSE_EXCEPTION,
-                    parse_mode="HTML"
-                )
-                await message.delete()
         if message.text == 'Отчет':
             report = Datafarm(data['symbol'], data['qnty'])
             report.report_graph()

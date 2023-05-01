@@ -36,8 +36,7 @@ class Datafarm:
     OPEN_POSITION = False
 
     # Процент дистанции от экстремума
-    PERCENT_BUY = 0.01
-    PERCENT_SELL = 0.007
+    PERCENT_ORDER = 0.002
 
     # Рабочий временной диапазон
     TIME_RANGE = 1
@@ -157,11 +156,11 @@ class Datafarm:
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
         signal_buy = round(
-            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_BUY)),
+            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_ORDER)),
             round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_SELL)),
+            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_ORDER)),
             round_float(num=self.last_price)
         )
 
@@ -207,11 +206,11 @@ class Datafarm:
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         signal_buy_report = round(
-            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_BUY)),
+            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_ORDER)),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_sell_report = round(
-            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_SELL)),
+            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_ORDER)),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_line = signal_buy_report if not self.__class__.OPEN_POSITION else signal_sell_report

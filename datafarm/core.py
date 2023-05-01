@@ -11,7 +11,6 @@ from datafarm.utils import round_list, remove_file, round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
-closed = False
 
 
 def bot_off() -> bool:
@@ -19,13 +18,6 @@ def bot_off() -> bool:
     """
     global online
     online = False
-    
-
-def bot_closed() -> bool:
-    """ Продажа по рынку
-    """
-    global closed
-    closed = True
 
 
 def start_single_bot(symbol, qnty):

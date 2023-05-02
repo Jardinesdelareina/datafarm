@@ -64,7 +64,7 @@ class Datafarm:
         self.symbol = symbol.upper()
         self.interval = interval
         self.qnty = qnty
-        self.data_file = f'datafarm/{self.symbol}.csv'
+        self.data_file = f'{self.symbol}.csv'
         self.__last_signal = None
         self.__last_log = None
 
@@ -194,8 +194,6 @@ class Datafarm:
             if self.last_price > signal_buy:
                 self.place_order('BUY')
                 report_signal('BUY')
-            elif closed:
-                remove_file(self.data_file)
             else:
                 report_log('BUY')
 
@@ -247,7 +245,7 @@ class Datafarm:
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
-        fig.write_image(f"datafarm/report.png")
+        fig.write_image(f"report.png")
 
 
     async def socket_stream(self):

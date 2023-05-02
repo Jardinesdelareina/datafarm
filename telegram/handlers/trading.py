@@ -59,7 +59,7 @@ async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
             await TradeStateGroup.next()
             await bot.send_message(
                 chat_id=CHAT_ID, 
-                text=STATE_QNTY, 
+                text=STATE_INTERVAL, 
                 parse_mode="HTML", 
                 reply_markup=interval_kb
             )
@@ -78,11 +78,11 @@ async def interval_callback(callback: types.CallbackQuery, state: FSMContext):
     """
     async with state.proxy() as data:
         if callback.data in interval_list:
-            data['interval'] = callback.data
+            data['interval'] = float(callback.data)
             await TradeStateGroup.next()
             await bot.send_message(
                 chat_id=CHAT_ID, 
-                text=STATE_INTERVAL, 
+                text=STATE_QNTY, 
                 parse_mode="HTML",
                 reply_markup=ReplyKeyboardRemove()
             )
@@ -126,18 +126,18 @@ async def qnty_message(message: types.Message, state: FSMContext):
                 chat_id=CHAT_ID, 
                 text=STATE_QNTY_MAX_VALUE_ERROR, 
                 parse_mode="HTML", 
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=start_kb
             )
             await TradeStateGroup.previous()
         
         await TradeStateGroup.next()
         symbol = data['symbol']
-        interval = data['interval']
+        interval = data['interval'] * 100
         qnty = data['qnty']
         STATE_RESULT = '''\U00002705 Сверим данные 
-                        Тикер: <b>{}</b>
-                        Интервал: <b>{}</b> 
-                        Объем USDT: <b>{}</b>'''.format(symbol, interval, qnty)
+        Тикер: <b>{}</b>
+        Интервал: <b>{} %</b> 
+        Объем: <b>{} USDT</b>'''.format(symbol, interval, qnty)
         await bot.send_message(
             chat_id=CHAT_ID, 
             text=STATE_RESULT,
@@ -155,7 +155,7 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
             data['start'] = callback.data
             if data['start'] == 'start':
                 def work():
-                    start_single_bot(data['symbol'], data['qnty'])
+                    start_single_bot(data['symbol'], data['interval'], data['qnty'])
                 thread_work = threading.Thread(target=work)
                 thread_work.start()
 
@@ -233,6 +233,7 @@ def register_handlers_trading(dp: Dispatcher):
     dp.register_message_handler(cancel_handler, state="*", text='Отмена')
     dp.register_message_handler(cancel_handler, Text(equals='Отмена', ignore_case=True), state="*")
     dp.register_callback_query_handler(symbol_callback, state=TradeStateGroup.symbol)
+    dp.register_callback_query_handler(interval_callback, state=TradeStateGroup.interval)
     dp.register_message_handler(qnty_message, state=TradeStateGroup.qnty)
     dp.register_callback_query_handler(start_callback, state=TradeStateGroup.start)
     dp.register_message_handler(manage_message, state="*")

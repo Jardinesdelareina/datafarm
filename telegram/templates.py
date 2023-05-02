@@ -56,7 +56,7 @@ STATE_START = '''
 STATE_INTERVAL = '''
 Выберите ценовой интервал работы алгоритма:
 '''
-STATE_QNTY = f'''
+STATE_QNTY = '''
 <em>
 Введите объем в USDT:
 </em>

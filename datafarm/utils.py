@@ -13,7 +13,7 @@ round_list = {
     'MATICUSDT': 4, 'UNIUSDT': 3, 'NEARUSDT': 3, 'AVAXUSDT': 2,
 }
 
-interval_list = [0.002, 0.005, 0.01]
+interval_list = ['0.002', '0.005', '0.01']
 
 
 def get_balance_ticker(ticker: str) -> float:

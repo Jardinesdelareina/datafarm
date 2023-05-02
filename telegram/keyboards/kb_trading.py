@@ -18,6 +18,13 @@ symbol_kb.row(symbol_btc, symbol_eth, symbol_bnb, symbol_xrp,)\
         .row(symbol_ada, symbol_dot, symbol_matic, symbol_avax,)\
         .row(symbol_link, symbol_sol, symbol_near, symbol_uni)
 
+# Меню выбора интервала
+interval_kb = InlineKeyboardMarkup(row_width=1)
+interval_low = InlineKeyboardButton(text='0.2 %', callback_data='0.002')
+interval_medium = InlineKeyboardButton(text='0.5 %', callback_data='0.005')
+interval_high = InlineKeyboardButton(text='1 %', callback_data='0.01')
+interval_kb.row(interval_low, interval_medium, interval_high)
+
 # Кнопка запуска алгоритма
 start_kb = InlineKeyboardMarkup(row_width=1)
 start_bot = InlineKeyboardButton(text='Старт', callback_data='start')

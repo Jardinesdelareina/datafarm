@@ -11,23 +11,27 @@ from datafarm.utils import round_list, remove_file, round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
+closed = False
 
 
 def bot_off() -> bool:
     """ Остановка алгоритма
     """
-    global online
+    global online, closed
     online = False
+    closed = True
 
 
-def start_single_bot(symbol, qnty):
+
+def start_single_bot(symbol, interval, qnty):
     """ Запуск алгоритма извне по одному выбранному тикеру
     """
-    global online
+    global online, closed
     online = True
+    closed = False
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    asyncio.run(Datafarm(symbol, qnty).socket_stream())
+    asyncio.run(Datafarm(symbol, interval, qnty).socket_stream())
 
 
 class Datafarm:
@@ -35,17 +39,16 @@ class Datafarm:
     # Наличие открытой позиции в рынке
     OPEN_POSITION = False
 
-    # Процент дистанции от экстремума
-    PERCENT_ORDER = 0.002
-
     # Рабочий временной диапазон
     TIME_RANGE = 1
 
 
-    def __init__(self, symbol, qnty=15):
+    def __init__(self, symbol, interval, qnty=15):
         """ Конструктор класса Datafarm
 
             symbol (str): Тикер криптовалютной пары
+
+            interval (float): Дистанция от экстремума
 
             qnty (float): Объем ордера, по-умолчанию 15
 
@@ -59,8 +62,9 @@ class Datafarm:
             при поступающих через вебсокеты идентичных данных.
         """
         self.symbol = symbol.upper()
+        self.interval = interval
         self.qnty = qnty
-        self.data_file = f'{self.symbol}.csv'
+        self.data_file = f'datafarm/{self.symbol}.csv'
         self.__last_signal = None
         self.__last_log = None
 
@@ -98,6 +102,7 @@ class Datafarm:
                 quantity=self.calculate_quantity(),
             )
             self.__class__.OPEN_POSITION = True
+            remove_file(self.data_file)
             self.buy_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -114,6 +119,7 @@ class Datafarm:
                 quantity=self.calculate_quantity(),
             )
             self.__class__.OPEN_POSITION = False
+            remove_file(self.data_file)
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -156,11 +162,11 @@ class Datafarm:
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
         signal_buy = round(
-            (time_period.Price.min() + (time_period.Price.min() * self.PERCENT_ORDER)),
+            (time_period.Price.min() + (time_period.Price.min() * self.interval)),
             round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Price.max() - (time_period.Price.max() * self.PERCENT_ORDER)),
+            (time_period.Price.max() - (time_period.Price.max() * self.interval)),
             round_float(num=self.last_price)
         )
 
@@ -187,15 +193,15 @@ class Datafarm:
         if not self.__class__.OPEN_POSITION:
             if self.last_price > signal_buy:
                 self.place_order('BUY')
-                remove_file(self.data_file)
                 report_signal('BUY')
+            elif closed:
+                remove_file(self.data_file)
             else:
                 report_log('BUY')
 
         if self.__class__.OPEN_POSITION:
-            if self.last_price < signal_sell:
+            if (self.last_price < signal_sell) or closed:
                 self.place_order('SELL')
-                remove_file(self.data_file)
                 report_signal('SELL')
             else:
                 report_log('SELL')
@@ -206,11 +212,11 @@ class Datafarm:
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         signal_buy_report = round(
-            (df_gph.Price.min() + (df_gph.Price.min() * self.PERCENT_ORDER)),
+            (df_gph.Price.min() + (df_gph.Price.min() * self.interval)),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_sell_report = round(
-            (df_gph.Price.max() - (df_gph.Price.max() * self.PERCENT_ORDER)),
+            (df_gph.Price.max() - (df_gph.Price.max() * self.interval)),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_line = signal_buy_report if not self.__class__.OPEN_POSITION else signal_sell_report
@@ -241,7 +247,7 @@ class Datafarm:
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
-        fig.write_image(f"report.png")
+        fig.write_image(f"datafarm/report.png")
 
 
     async def socket_stream(self):

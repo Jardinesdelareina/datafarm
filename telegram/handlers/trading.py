@@ -1,11 +1,11 @@
-import threading, os
+import threading
 from aiogram import types, Dispatcher
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from datafarm.core import start_single_bot, bot_off, bot_closed, Datafarm
-from datafarm.utils import symbol_list, get_balance_ticker, remove_file
+from datafarm.core import start_single_bot, bot_off, Datafarm
+from datafarm.utils import symbol_list, interval_list, get_balance_ticker
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *
@@ -13,9 +13,14 @@ from telegram.keyboards.kb_welcome import main_kb
 
 
 class TradeStateGroup(StatesGroup):
-    """ Состояние параметров: криптовалютные пары, объем ордеров, старт/остановка алгоритма
+    """ Состояние параметров: 
+            криптовалютные пары, 
+            ценовой интервал, 
+            объем ордеров, 
+            старт/остановка алгоритма
     """
     symbol = State()
+    interval = State()
     qnty = State()
     start = State()
     stop = State()
@@ -56,7 +61,7 @@ async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
                 chat_id=CHAT_ID, 
                 text=STATE_QNTY, 
                 parse_mode="HTML", 
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=interval_kb
             )
         else:
             await state.finish()
@@ -66,6 +71,29 @@ async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
                 parse_mode="HTML",
                 reply_markup=main_kb
             )            
+
+
+async def interval_callback(callback: types.CallbackQuery, state: FSMContext):
+    """ Сохраняет интервал в стейт, предлагает ввести рабочий объем ордеров 
+    """
+    async with state.proxy() as data:
+        if callback.data in interval_list:
+            data['interval'] = callback.data
+            await TradeStateGroup.next()
+            await bot.send_message(
+                chat_id=CHAT_ID, 
+                text=STATE_INTERVAL, 
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        else:
+            await state.finish()
+            await bot.send_message(
+                chat_id=CHAT_ID, 
+                text=STATE_VALID_ERROR,
+                parse_mode="HTML",
+                reply_markup=main_kb
+            )
 
 
 async def qnty_message(message: types.Message, state: FSMContext):
@@ -97,14 +125,19 @@ async def qnty_message(message: types.Message, state: FSMContext):
             await bot.send_message(
                 chat_id=CHAT_ID, 
                 text=STATE_QNTY_MAX_VALUE_ERROR, 
-                parse_mode="HTML"
+                parse_mode="HTML", 
+                reply_markup=ReplyKeyboardRemove()
             )
             await TradeStateGroup.previous()
         
         await TradeStateGroup.next()
         symbol = data['symbol']
+        interval = data['interval']
         qnty = data['qnty']
-        STATE_RESULT = f'\U00002705 Сверим данные \n Тикер: <b>{symbol}</b> \n Объем USDT: <b>{qnty}</b>'
+        STATE_RESULT = '''\U00002705 Сверим данные 
+                        Тикер: <b>{}</b>
+                        Интервал: <b>{}</b> 
+                        Объем USDT: <b>{}</b>'''.format(symbol, interval, qnty)
         await bot.send_message(
             chat_id=CHAT_ID, 
             text=STATE_RESULT,
@@ -159,7 +192,7 @@ async def manage_message(message: types.Message, state: FSMContext):
             )
             await message.delete()
         if message.text == 'Отчет':
-            report = Datafarm(data['symbol'], data['qnty'])
+            report = Datafarm(data['symbol'], data['interval'], data['qnty'])
             report.report_graph()
             print('Отчет')
             with open('report.png', 'rb') as photo:
@@ -192,7 +225,6 @@ async def stop_callback(callback: types.CallbackQuery, state: FSMContext):
                 text=STATE_STOP, 
                 reply_markup=main_kb
             )
-            remove_file('report.png')
             await state.finish()
 
 

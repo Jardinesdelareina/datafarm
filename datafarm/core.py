@@ -11,24 +11,20 @@ from datafarm.utils import round_list, remove_file, round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
-closed = False
 
 
 def bot_off() -> bool:
     """ Остановка алгоритма
     """
-    global online, closed
+    global online
     online = False
-    closed = True
-
 
 
 def start_single_bot(symbol, interval, qnty):
     """ Запуск алгоритма извне по одному выбранному тикеру
     """
-    global online, closed
+    global online
     online = True
-    closed = False
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     asyncio.run(Datafarm(symbol, interval, qnty).socket_stream())
@@ -141,7 +137,6 @@ class Datafarm:
             Price (float): Значение цены тикера
             stream (dict): Данные, поступающие через вебсокеты
         """
-        global closed
 
         # Запись
         df = pd.DataFrame(stream['data'], index=[0])
@@ -198,7 +193,7 @@ class Datafarm:
                 report_log('BUY')
 
         if self.__class__.OPEN_POSITION:
-            if (self.last_price < signal_sell) or closed:
+            if self.last_price < signal_sell:
                 self.place_order('SELL')
                 report_signal('SELL')
             else:
@@ -206,6 +201,8 @@ class Datafarm:
 
 
     def report_graph(self):
+        """ Визуализация определенных данных и сигналов на вход в рынок
+        """
         df_gph = pd.read_csv(self.data_file)
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]

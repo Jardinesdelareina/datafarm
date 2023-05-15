@@ -7,7 +7,7 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import round_list, remove_file, round_float
+from datafarm.utils import send_message, round_list, remove_file, round_float
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 online = True
@@ -65,15 +65,6 @@ class Datafarm:
         self.__last_log = None
 
 
-    def send_message(self, message: str):
-        """ Уведомления в Telegram 
-        """
-        return requests.get(
-            f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
-            params=dict(chat_id=CHAT_ID, text=message)
-        )
-
-
     def calculate_quantity(self) -> float:
         """ Расчет объема ордера 
         """
@@ -104,7 +95,7 @@ class Datafarm:
                 round_float(num=self.last_price)
             )
             message = f'{self.symbol} \n Buy \n {self.buy_price}'
-            self.send_message(message)
+            send_message(message)
             print(message)
 
         elif order_side == 'SELL':
@@ -122,7 +113,7 @@ class Datafarm:
             )
             result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
             message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
-            self.send_message(message)
+            send_message(message)
             print(message)
 
 

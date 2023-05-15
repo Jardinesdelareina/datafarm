@@ -1,5 +1,7 @@
 import os
+import requests
 from datafarm.config_binance import CLIENT
+from telegram.config_telegram import TELETOKEN, CHAT_ID
 
 symbol_list = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 
@@ -14,6 +16,15 @@ round_list = {
 }
 
 interval_list = ['0.002', '0.005', '0.01']
+
+
+def send_message(message: str):
+    """ Уведомления в Telegram 
+    """
+    return requests.get(
+        f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
+        params=dict(chat_id=CHAT_ID, text=message)
+    )
 
 
 def get_balance_ticker(ticker: str) -> float:

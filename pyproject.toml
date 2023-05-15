@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "datafarm"
+version = "0.1.0"
+description = "Author's trading algorithm"
+authors = ["jardinesdelareina <jardinesdelareina@mail.ru>"]
+license = "BSD 3-Clause License"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyclean = "^2.7.2"
+environs = "^9.5.0"
+python-binance = "^1.0.17"
+plotly = "^5.14.1"
+pandas = "^2.0.1"
+aiogram = "^2.25.1"
+kaleido = "0.2.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

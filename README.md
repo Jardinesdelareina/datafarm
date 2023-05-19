@@ -1,4 +1,4 @@
-# Datafarm
+# Datafarm<font style="color:blue">.Trading</font>
 
 ## Криптовалютный торговый алгоритм для Binance
 

@@ -5,7 +5,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from datafarm.core import start_single_bot, bot_off, Datafarm
-from datafarm.utils import symbol_list, interval_list, get_balance_ticker
+from datafarm.utils import symbol_list, get_balance_ticker
 from telegram.config_telegram import bot, CHAT_ID
 from telegram.templates import *
 from telegram.keyboards.kb_trading import *
@@ -15,12 +15,10 @@ from telegram.keyboards.kb_welcome import main_kb
 class TradeStateGroup(StatesGroup):
     """ Состояние параметров: 
             криптовалютные пары, 
-            ценовой интервал, 
             объем ордеров, 
             старт/остановка алгоритма
     """
     symbol = State()
-    interval = State()
     qnty = State()
     start = State()
     stop = State()
@@ -51,7 +49,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
 
 async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
-    """ Сохраняет тикер в стейт, предлагает список интервалов 
+    """ Сохраняет тикер в стейт, предлагает ввести рабочий объем
     """
     async with state.proxy() as data:
         if callback.data in symbol_list:
@@ -59,31 +57,8 @@ async def symbol_callback(callback: types.CallbackQuery, state: FSMContext):
             await TradeStateGroup.next()
             await bot.send_message(
                 chat_id=CHAT_ID, 
-                text=STATE_INTERVAL, 
-                parse_mode="HTML", 
-                reply_markup=interval_kb
-            )
-        else:
-            await state.finish()
-            await bot.send_message(
-                chat_id=CHAT_ID, 
-                text=STATE_VALID_ERROR,
-                parse_mode="HTML",
-                reply_markup=main_kb
-            )            
-
-
-async def interval_callback(callback: types.CallbackQuery, state: FSMContext):
-    """ Сохраняет интервал в стейт, предлагает ввести рабочий объем ордеров 
-    """
-    async with state.proxy() as data:
-        if callback.data in interval_list:
-            data['interval'] = float(callback.data)
-            await TradeStateGroup.next()
-            await bot.send_message(
-                chat_id=CHAT_ID, 
                 text=STATE_QNTY, 
-                parse_mode="HTML",
+                parse_mode="HTML", 
                 reply_markup=ReplyKeyboardRemove()
             )
         else:
@@ -93,7 +68,7 @@ async def interval_callback(callback: types.CallbackQuery, state: FSMContext):
                 text=STATE_VALID_ERROR,
                 parse_mode="HTML",
                 reply_markup=main_kb
-            )
+            )            
 
 
 async def qnty_message(message: types.Message, state: FSMContext):
@@ -119,7 +94,9 @@ async def qnty_message(message: types.Message, state: FSMContext):
                 parse_mode="HTML"
             )
             await TradeStateGroup.previous()
-        elif get_balance_ticker('USDT') - quantity_float > 0:
+        elif (
+            get_balance_ticker('TUSD') if data['symbol'] == 'BTCTUSD' else get_balance_ticker('USDT')
+        ) - quantity_float > 0:
             data['qnty'] = quantity_float
         else:
             await bot.send_message(
@@ -132,12 +109,10 @@ async def qnty_message(message: types.Message, state: FSMContext):
         
         await TradeStateGroup.next()
         symbol = data['symbol']
-        interval = data['interval'] * 100
         qnty = data['qnty']
         STATE_RESULT = '''\U00002705 Сверим данные 
         Тикер: <b>{}</b>
-        Интервал: <b>{} %</b> 
-        Объем: <b>{} USDT</b>'''.format(symbol, interval, qnty)
+        Объем: <b>{} USDT</b>'''.format(symbol, qnty)
         await bot.send_message(
             chat_id=CHAT_ID, 
             text=STATE_RESULT,
@@ -155,7 +130,7 @@ async def start_callback(callback: types.CallbackQuery, state: FSMContext):
             data['start'] = callback.data
             if data['start'] == 'start':
                 def work():
-                    start_single_bot(data['symbol'], data['interval'], data['qnty'])
+                    start_single_bot(data['symbol'], data['qnty'])
                 thread_work = threading.Thread(target=work)
                 thread_work.start()
 
@@ -192,7 +167,7 @@ async def manage_message(message: types.Message, state: FSMContext):
             )
             await message.delete()
         if message.text == 'Отчет':
-            report = Datafarm(data['symbol'], data['interval'], data['qnty'])
+            report = Datafarm(data['symbol'], data['qnty'])
             report.report_graph()
             print('Отчет')
             with open('report.png', 'rb') as photo:
@@ -233,7 +208,6 @@ def register_handlers_trading(dp: Dispatcher):
     dp.register_message_handler(cancel_handler, state="*", text='Отмена')
     dp.register_message_handler(cancel_handler, Text(equals='Отмена', ignore_case=True), state="*")
     dp.register_callback_query_handler(symbol_callback, state=TradeStateGroup.symbol)
-    dp.register_callback_query_handler(interval_callback, state=TradeStateGroup.interval)
     dp.register_message_handler(qnty_message, state=TradeStateGroup.qnty)
     dp.register_callback_query_handler(start_callback, state=TradeStateGroup.start)
     dp.register_message_handler(manage_message, state="*")

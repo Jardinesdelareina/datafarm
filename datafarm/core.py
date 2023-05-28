@@ -1,5 +1,4 @@
 import os
-import requests
 import asyncio
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,27 +6,26 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import send_message, round_list, remove_file, round_float
-from telegram.config_telegram import TELETOKEN, CHAT_ID
+from datafarm.utils import send_message, remove_file, round_float
 
 online = True
 
 
-def bot_off() -> bool:
+def bot_off():
     """ Остановка алгоритма
     """
     global online
     online = False
 
 
-def start_single_bot(symbol, interval, qnty):
+def start_single_bot(symbol, qnty):
     """ Запуск алгоритма извне по одному выбранному тикеру
     """
     global online
     online = True
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    asyncio.run(Datafarm(symbol, interval, qnty).socket_stream())
+    asyncio.run(Datafarm(symbol, qnty).socket_stream())
 
 
 class Datafarm:
@@ -38,13 +36,13 @@ class Datafarm:
     # Рабочий временной диапазон
     TIME_RANGE = 1
 
+    # Дистанция от экстремума
+    MIN_INTERVAL = 0.002
 
-    def __init__(self, symbol, interval, qnty=15):
+    def __init__(self, symbol, qnty=15):
         """ Конструктор класса Datafarm
 
             symbol (str): Тикер криптовалютной пары
-
-            interval (float): Дистанция от экстремума
 
             qnty (float): Объем ордера, по-умолчанию 15
 
@@ -58,7 +56,6 @@ class Datafarm:
             при поступающих через вебсокеты идентичных данных.
         """
         self.symbol = symbol.upper()
-        self.interval = interval
         self.qnty = qnty
         self.data_file = f'{self.symbol}.csv'
         self.__last_signal = None
@@ -134,25 +131,35 @@ class Datafarm:
         df = df.loc[:,['s', 'E', 'p']]
         df.columns = ['Symbol', 'Time', 'Price']
         df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df.Price = round(df.Price.astype(float), round_list[f'{self.symbol}'])
+        df.Price = round(df.Price.astype(float), 2)
         with open(self.data_file, 'a') as f:
             if os.stat(self.data_file).st_size == 0:
                 df.to_csv(f, mode='a', header=True, index=False)
             else:
                 df.to_csv(f, mode='a', header=False, index=False)
-
+        
         # Чтение
         df_csv = pd.read_csv(f'{self.symbol}.csv')
         df_csv.Time = pd.to_datetime(df_csv.Time)
         self.last_price = df_csv.Price.iloc[-1]
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
         
+
+        def get_interval():
+            """ Расчитывает интервал для сигнала: либо четверть от диапазона, 
+                либо MIN_INTERVAL, если он больше
+            """
+            quarter_time_range = ((time_period.Price.max() - time_period.Price.min()) / 4) / self.last_price
+            quarter_time_range = round(quarter_time_range, 3)
+            return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
+
+
         signal_buy = round(
-            (time_period.Price.min() + (time_period.Price.min() * self.interval)),
+            (time_period.Price.min() + (time_period.Price.min() * get_interval())),
             round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Price.max() - (time_period.Price.max() * self.interval)),
+            (time_period.Price.max() - (time_period.Price.max() * get_interval())),
             round_float(num=self.last_price)
         )
 
@@ -197,12 +204,23 @@ class Datafarm:
         df_gph = pd.read_csv(self.data_file)
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        
+
+        def get_interval():
+            """ Расчитывает интервал для сигнала: либо четверть от диапазона, 
+                либо MIN_INTERVAL, если он больше
+            """
+            quarter_time_range = ((df_gph.Price.max() - df_gph.Price.min()) / 4) / self.last_price
+            quarter_time_range = round(quarter_time_range, 3)
+            return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
+        
+
         signal_buy_report = round(
-            (df_gph.Price.min() + (df_gph.Price.min() * self.interval)),
+            (df_gph.Price.min() + (df_gph.Price.min() * get_interval())),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_sell_report = round(
-            (df_gph.Price.max() - (df_gph.Price.max() * self.interval)),
+            (df_gph.Price.max() - (df_gph.Price.max() * get_interval())),
             round_float(num=df_gph.Price.iloc[-1])
         )
         signal_line = signal_buy_report if not self.__class__.OPEN_POSITION else signal_sell_report
@@ -233,7 +251,7 @@ class Datafarm:
         )
         data = [chart]
         fig = go.Figure(data=data, layout=layout)
-        fig.write_image(f"report.png")
+        fig.write_image('report.png')
 
 
     async def socket_stream(self):

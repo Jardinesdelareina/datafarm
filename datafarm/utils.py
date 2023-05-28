@@ -3,23 +3,12 @@ import requests
 from datafarm.config_binance import CLIENT
 from telegram.config_telegram import TELETOKEN, CHAT_ID
 
-symbol_list = [
-    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 
-    'DOTUSDT', 'LINKUSDT', 'ADAUSDT', 'SOLUSDT', 
-    'MATICUSDT', 'UNIUSDT', 'NEARUSDT', 'AVAXUSDT',
-]
-
-round_list = {
-    'BTCUSDT': 2, 'ETHUSDT': 2, 'BNBUSDT': 1, 'XRPUSDT': 4,
-    'DOTUSDT': 3, 'LINKUSDT': 3, 'ADAUSDT': 4, 'SOLUSDT': 2,
-    'MATICUSDT': 4, 'UNIUSDT': 3, 'NEARUSDT': 3, 'AVAXUSDT': 2,
-}
-
-interval_list = ['0.002', '0.005', '0.01']
+symbol_list = ['BTCTUSD', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', ]
+round_list = {'BTCTUSD': 2, 'BTCUSDT': 2, 'ETHUSDT': 2, 'BNBUSDT': 1, 'XRPUSDT': 4,}
 
 
 def send_message(message: str):
-    """ Уведомления в Telegram 
+    """ Уведомление в Telegram 
     """
     return requests.get(
         f'https://api.telegram.org/bot{TELETOKEN}/sendMessage', 
@@ -34,7 +23,7 @@ def get_balance_ticker(ticker: str) -> float:
         return (float): Количество заданной криптовалюты
     """
     asset_balance = CLIENT.get_asset_balance(ticker)
-    if ticker == 'USDT':
+    if ticker == 'USDT' or ticker == 'TUSD':
         round_balance = 1
     else:
         round_balance = 4

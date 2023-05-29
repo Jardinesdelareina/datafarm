@@ -6,7 +6,7 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.helpers import round_step_size
 from datafarm.config_binance import CLIENT
-from datafarm.utils import send_message, remove_file, round_float
+from datafarm.utils import send_message, remove_file, round_float, round_list
 
 online = True
 
@@ -127,11 +127,11 @@ class Datafarm:
         """
 
         # Запись
-        df = pd.DataFrame(stream['data'], index=[0])
-        df = df.loc[:,['s', 'E', 'p']]
+        df = pd.DataFrame([stream])
+        df = df.loc[:,['s', 'E', 'b']]
         df.columns = ['Symbol', 'Time', 'Price']
         df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df.Price = round(df.Price.astype(float), 2)
+        df.Price = round(df.Price.astype(float), round_list[f'{self.symbol}'])
         with open(self.data_file, 'a') as f:
             if os.stat(self.data_file).st_size == 0:
                 df.to_csv(f, mode='a', header=True, index=False)
@@ -204,13 +204,14 @@ class Datafarm:
         df_gph = pd.read_csv(self.data_file)
         df_gph.Time = pd.to_datetime(df_gph.Time)
         df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        gph_last_price = df_gph.Price.iloc[-1]
         
 
         def get_interval():
             """ Расчитывает интервал для сигнала: либо четверть от диапазона, 
                 либо MIN_INTERVAL, если он больше
             """
-            quarter_time_range = ((df_gph.Price.max() - df_gph.Price.min()) / 4) / self.last_price
+            quarter_time_range = ((df_gph.Price.max() - df_gph.Price.min()) / 4) / gph_last_price
             quarter_time_range = round(quarter_time_range, 3)
             return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
         
@@ -259,7 +260,7 @@ class Datafarm:
         """
         global online
         bm = BinanceSocketManager(client=CLIENT)
-        ts = bm.symbol_mark_price_socket(self.symbol, fast=False)
+        ts = bm.symbol_ticker_socket(self.symbol)
         async with ts as tscm:
             while online:
                 res = await tscm.recv()

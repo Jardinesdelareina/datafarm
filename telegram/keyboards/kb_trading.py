@@ -1,13 +1,12 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Меню выбора тикера
-symbol_kb = InlineKeyboardMarkup(row_width=3)
-symbol_btctusd = InlineKeyboardButton(text='BTCTUSD', callback_data='BTCTUSD')
+symbol_kb = InlineKeyboardMarkup(row_width=2)
 symbol_btc = InlineKeyboardButton(text='BTC', callback_data='BTCUSDT')
 symbol_eth = InlineKeyboardButton(text='ETH', callback_data='ETHUSDT')
 symbol_bnb = InlineKeyboardButton(text='BNB', callback_data='BNBUSDT')
 symbol_xrp = InlineKeyboardButton(text='XRP', callback_data='XRPUSDT')
-symbol_kb.row(symbol_btctusd).row(symbol_btc, symbol_eth).row(symbol_bnb, symbol_xrp)
+symbol_kb.row(symbol_btc, symbol_eth).row(symbol_bnb, symbol_xrp)
 
 # Кнопка запуска алгоритма
 start_kb = InlineKeyboardMarkup(row_width=1)

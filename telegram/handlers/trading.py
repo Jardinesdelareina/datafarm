@@ -94,9 +94,7 @@ async def qnty_message(message: types.Message, state: FSMContext):
                 parse_mode="HTML"
             )
             await TradeStateGroup.previous()
-        elif (
-            get_balance_ticker('TUSD') if data['symbol'] == 'BTCTUSD' else get_balance_ticker('USDT')
-        ) - quantity_float > 0:
+        elif get_balance_ticker('USDT') - quantity_float > 0:
             data['qnty'] = quantity_float
         else:
             await bot.send_message(

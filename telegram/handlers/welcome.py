@@ -29,10 +29,8 @@ async def get_help(message: types.Message):
 async def get_balance(message: types.Message):
     """ Баланс спотового кошелька
     """
-    BALANCE = '''\U0001F4BC Ваш криптовалютный портфель:
-    <em>USDT</em>: <b>{}</b> 
-    <em>TUSD</em>: <b>{}</b>
-    \n'''.format(get_balance_ticker('USDT'), get_balance_ticker('TUSD'))
+    balance_usdt = get_balance_ticker('USDT')
+    BALANCE = f'\U0001F4BC Ваш криптовалютный портфель \n <em>USDT</em>: <b>{balance_usdt}</b> \n'
     for ticker in symbol_list:
         ticker_name = ticker.replace('USDT', '')
         balance = get_balance_ticker(ticker_name)

@@ -87,8 +87,8 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.__class__.OPEN_POSITION = True
             remove_file(self.data_file)
+            self.__class__.OPEN_POSITION = True
             self.buy_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -104,8 +104,8 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            self.__class__.OPEN_POSITION = False
             remove_file(self.data_file)
+            self.__class__.OPEN_POSITION = False
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
                 round_float(num=self.last_price)
@@ -133,7 +133,8 @@ class Datafarm:
         df = df.loc[:,['s', 'E', 'b', 'a']]
         df.columns = ['Symbol', 'Time', 'Bid', 'Ask']
         df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df.Price = round(df.Price.astype(float), round_list[f'{self.symbol}'])
+        for column in ['Bid', 'Ask']:
+            df[column] = round(df[column].astype(float), round_list[f'{self.symbol}'])
         with open(self.data_file, 'a') as f:
             if os.stat(self.data_file).st_size == 0:
                 df.to_csv(f, mode='a', header=True, index=False)
@@ -179,7 +180,11 @@ class Datafarm:
             """ Логирование ожидания сигнала
             """
             signal = signal_buy if not self.__class__.OPEN_POSITION else signal_sell
-            message = f'{self.symbol}: {self.last_price} {order_side}: {signal}'
+            message = f'''
+            {self.symbol}: {self.last_price}
+            {order_side}: {signal}
+            INTERVAL: {get_interval() * 100}
+            '''
             if message != self.__last_log:
                 print(message)
                 self.__last_log = message

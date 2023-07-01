@@ -7,8 +7,8 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.exceptions import BinanceAPIException as bae
 from binance.helpers import round_step_size
-from datafarm.config_binance import CLIENT
-from datafarm.utils import send_message, remove_file, round_float, round_list
+from src.config import CLIENT, DEBUG
+from src.utils import send_message, remove_file, round_float, round_list
 
 online = True
 
@@ -20,8 +20,8 @@ def bot_off():
     online = False
 
 
-def start_single_bot(symbol, qnty):
-    """ Запуск алгоритма извне по одному выбранному тикеру
+def start_single_bot(symbol, qnty=50):
+    """ Запуск алгоритма
     """
     global online
     online = True
@@ -41,21 +41,21 @@ class Datafarm:
     # Дистанция от экстремума
     MIN_INTERVAL = 0.002
 
-    def __init__(self, symbol, qnty=15):
+    def __init__(self, symbol, qnty):
         """ Конструктор класса Datafarm
 
             symbol (str): Тикер криптовалютной пары
 
-            qnty (float): Объем ордера, по-умолчанию 15
+            qnty (float): Объем ордера, по-умолчанию 50
 
             __last_signal (str): Текстовое сообщение о торговом сигнале, передаваемое как 
-                                уведомление в Telegram и в терминал.
+                                уведомление в Telegram и в терминал
 
             __last_log (str): Текстовое уведомление, логирующее работу алгоритма в состоянии
-                            ожидания торгового сигнала.
+                            ожидания торгового сигнала
 
             ** __last_signal и __last_log служат для предотвращения дублирования уведомлений
-            при поступающих через вебсокеты идентичных данных.
+            при поступающих через вебсокеты идентичных данных
         """
         self.symbol = symbol.upper()
         self.qnty = qnty
@@ -70,18 +70,17 @@ class Datafarm:
         symbol_info = CLIENT.get_symbol_info(self.symbol)
         step_size = symbol_info.get('filters')[1]['stepSize']
         order_volume = self.qnty / self.last_price
-        order_volume = round_step_size(order_volume, step_size)
-        return order_volume
+        return round_step_size(order_volume, step_size)
 
 
     def place_order(self, order_side: str):
         """ Размещение ордеров
             
-            order_side (str): Направление ордера, передаваемое при вызове функции в алгоритме.
+            order_side (str): Направление ордера, передаваемое при вызове функции в алгоритме
         """
 
         if order_side == 'BUY':
-            order = CLIENT.create_order(
+            order = None if DEBUG else CLIENT.create_order(
                 symbol=self.symbol, 
                 side='BUY', 
                 type='MARKET', 
@@ -97,8 +96,8 @@ class Datafarm:
             send_message(message)
             print(message)
 
-        elif order_side == 'SELL':
-            order = CLIENT.create_order(
+        if order_side == 'SELL':
+            order = None if DEBUG else CLIENT.create_order(
                 symbol=self.symbol, 
                 side='SELL', 
                 type='MARKET', 
@@ -124,7 +123,8 @@ class Datafarm:
             
             Symbol (str): Название тикера
             Time (datetime): Время поступления данных
-            Price (float): Значение цены тикера
+            Bid (float): Цена Bid
+            Ask (float):Цена Ask
             stream (dict): Данные, поступающие через вебсокеты
         """
 
@@ -142,27 +142,35 @@ class Datafarm:
                 df.to_csv(f, mode='a', header=False, index=False)
         
         # Чтение
-        df_csv = pd.read_csv(f'{self.symbol}.csv')
+        df_csv = pd.read_csv(self.data_file)
         df_csv.Time = pd.to_datetime(df_csv.Time)
-        self.last_price = round(((df_csv.Bid.iloc[-1] + df_csv.Ask.iloc[-1]) / 2), round_list[f'{self.symbol}'])
+
+        # Фильтр и сохраниение данных за определенный период
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        time_period_df = time_period.to_csv(self.data_file, mode='w', header=True, index=False)
         
+        self.last_price = round(
+            ((time_period_df.Bid.iloc[-1] + time_period_df.Ask.iloc[-1]) / 2), 
+            round_list[f'{self.symbol}']
+        )
+
 
         def get_interval():
-            """ Расчитывает интервал для сигнала: либо четверть от диапазона, 
+            """ Расчитывает интервал для сигнала: 
+                либо четверть от диапазона, 
                 либо MIN_INTERVAL, если он больше
             """
-            quarter_time_range = ((time_period.Bid.max() - time_period.Ask.min()) / 4) / self.last_price
+            quarter_time_range = ((time_period_df.Bid.max() - time_period_df.Ask.min()) / 4) / self.last_price
             quarter_time_range = round(quarter_time_range, 3)
             return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
 
 
         signal_buy = round(
-            (time_period.Ask.min() + (time_period.Ask.min() * get_interval())),
+            (time_period_df.Ask.min() + (time_period_df.Ask.min() * get_interval())),
             round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period.Bid.max() - (time_period.Bid.max() * get_interval())),
+            (time_period_df.Bid.max() - (time_period_df.Bid.max() * get_interval())),
             round_float(num=self.last_price)
         )
 
@@ -278,6 +286,8 @@ class Datafarm:
                         print('Binance API Exception')
                         time.sleep(5)
                         self.create_frame(res)
+                    except KeyboardInterrupt:
+                        online = False
                 await asyncio.sleep(0)
             if not online:
                 remove_file(self.data_file)

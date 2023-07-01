@@ -5,6 +5,5 @@ __pycache__/
 *.pyc
 *.csv
 report.png
-
-poetry.lock
+venv
 .env

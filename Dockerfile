@@ -4,11 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
-RUN apt-get update \
-    && apt-get install -y curl \
-    && curl -sSL https://install.python-poetry.org \
-    | python3 - --git https://github.com/python-poetry/poetry.git@master
-WORKDIR /app
-COPY pyproject.toml poetry.lock /app
-RUN poetry install --no-dev
-COPY . /app
+RUN pip install --upgrade pip
+COPY ./req.txt .
+RUN pip install -r req.txt
+COPY . .

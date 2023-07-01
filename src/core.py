@@ -144,13 +144,10 @@ class Datafarm:
         # Чтение
         df_csv = pd.read_csv(self.data_file)
         df_csv.Time = pd.to_datetime(df_csv.Time)
-
-        # Фильтр и сохраниение данных за определенный период
         time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
-        time_period_df = time_period.to_csv(self.data_file, mode='w', header=True, index=False)
         
         self.last_price = round(
-            ((time_period_df.Bid.iloc[-1] + time_period_df.Ask.iloc[-1]) / 2), 
+            ((time_period.Bid.iloc[-1] + time_period.Ask.iloc[-1]) / 2), 
             round_list[f'{self.symbol}']
         )
 
@@ -160,17 +157,17 @@ class Datafarm:
                 либо четверть от диапазона, 
                 либо MIN_INTERVAL, если он больше
             """
-            quarter_time_range = ((time_period_df.Bid.max() - time_period_df.Ask.min()) / 4) / self.last_price
+            quarter_time_range = ((time_period.Bid.max() - time_period.Ask.min()) / 4) / self.last_price
             quarter_time_range = round(quarter_time_range, 3)
             return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
 
 
         signal_buy = round(
-            (time_period_df.Ask.min() + (time_period_df.Ask.min() * get_interval())),
+            (time_period.Ask.min() + (time_period.Ask.min() * get_interval())),
             round_float(num=self.last_price)
         )
         signal_sell = round(
-            (time_period_df.Bid.max() - (time_period_df.Bid.max() * get_interval())),
+            (time_period.Bid.max() - (time_period.Bid.max() * get_interval())),
             round_float(num=self.last_price)
         )
 
@@ -288,6 +285,5 @@ class Datafarm:
                         self.create_frame(res)
                     except KeyboardInterrupt:
                         online = False
+                        remove_file(self.data_file)
                 await asyncio.sleep(0)
-            if not online:
-                remove_file(self.data_file)

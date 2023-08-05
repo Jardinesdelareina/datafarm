@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 import pandas as pd
@@ -7,14 +6,14 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.exceptions import BinanceAPIException as bae
 from binance.helpers import round_step_size
-from config import CLIENT, DEBUG
-from utils import log_alert, remove_file, round_float, round_list
+from config import CLIENT, DEBUG, ENGINE
+from utils import log_alert, round_float, round_list, execute_query
+from queries import *
 
 
 class Datafarm:
 
     OPEN_POSITION = False           # Наличие открытой позиции в рынке
-    TIME_RANGE = 60                # Рабочий временной диапазон (в часах)
     MIN_INTERVAL = 0.002            # Дистанция от экстремума (в процентах)
 
     def __init__(self, symbol, qnty):
@@ -60,7 +59,7 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            remove_file(self.data_file)
+            execute_query(drop_data)
             self.__class__.OPEN_POSITION = True
             self.buy_price = round(
                 float(order.get('fills')[0]['price']), 
@@ -76,7 +75,7 @@ class Datafarm:
                 type='MARKET', 
                 quantity=self.calculate_quantity(),
             )
-            remove_file(self.data_file)
+            execute_query(drop_data)
             self.__class__.OPEN_POSITION = False
             self.sell_price = round(
                 float(order.get('fills')[0]['price']), 
@@ -87,63 +86,42 @@ class Datafarm:
             log_alert(message)
 
 
-    def create_frame(self, stream):
-        """ Получение данных, сохранение их в таблице .csv,
-            чтение файла с данными и построение стратегии на основе полученных данных
-
-            Структура таблицы файла .csv:
-            
-            Symbol (str): Название тикера
-            Time (datetime): Время поступления данных
-            Bid (float): Цена Bid
-            Ask (float):Цена Ask
-            stream (dict): Данные, поступающие через вебсокеты
+    def get_interval(self):
+        """ Расчитывает интервал для сигнала: 
+            либо четверть от диапазона, 
+            либо MIN_INTERVAL, если он больше
         """
+        quarter_time_range = (abs
+            (execute_query(max_price_range) - execute_query(min_price_range)) / 4
+        ) / self.last_price
 
-        # Запись
-        df = pd.DataFrame([stream])
-        df = df.loc[:,['s', 'E', 'b', 'a']]
-        df.columns = ['Symbol', 'Time', 'Bid', 'Ask']
-        df.Time = pd.Series(pd.to_datetime(df.Time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
-        for column in ['Bid', 'Ask']:
-            df[column] = round(df[column].astype(float), round_list[f'{self.symbol}'])
-        with open(self.data_file, 'a') as f:
-            if os.stat(self.data_file).st_size == 0:
-                df.to_csv(f, mode='a', header=True, index=False)
-            else:
-                df.to_csv(f, mode='a', header=False, index=False)
+        print(self.last_price)
+        print(quarter_time_range)
+        return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
+
+
+    def create_frame(self, stream):
+        """ Получение данных, сохранение в базу данных,
+            чтение и построение стратегии на основе полученных данных
+        """
+        try:
+            df = pd.DataFrame([stream])
+            df = df.loc[:,['s', 'E', 'p']]
+            df.columns = ['symbol', 'time', 'price']
+            df.time = pd.Series(pd.to_datetime(df.time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
+            df.price = round(df.price.astype(float), round_list[f'{self.symbol}'])
+            df.to_sql(name='market_stream', con=ENGINE, if_exists='append', index=False)
+        except KeyError:
+            pass
         
-        # Чтение
-        df_csv = pd.read_csv(self.data_file)
-        df_csv.Time = pd.to_datetime(df_csv.Time)
-        time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(minutes=self.TIME_RANGE))]
-        
-        self.last_price = round(
-            ((time_period.Bid.iloc[-1] + time_period.Ask.iloc[-1]) / 2), 
-            round_list[f'{self.symbol}']
-        )
+        self.last_price = execute_query(last_price)
 
-
-        def get_interval():
-            """ Расчитывает интервал для сигнала: 
-                либо четверть от диапазона, 
-                либо MIN_INTERVAL, если он больше
-            """
-            quarter_time_range = (abs(time_period.Bid.max() - time_period.Ask.min()) / 4) / self.last_price
-            print(time_period)
-            print(time_period.Bid.max())
-            print(time_period.Ask.min())
-            print(self.last_price)
-            print(quarter_time_range)
-            return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
-
-
-        signal_buy = round(
-            (time_period.Ask.min() + (time_period.Ask.min() * get_interval())),
+        self.signal_buy = round(
+            ((execute_query(min_price_range)) + (execute_query(min_price_range)) * self.get_interval()),
             round_float(num=self.last_price)
         )
-        signal_sell = round(
-            (time_period.Bid.max() - (time_period.Bid.max() * get_interval())),
+        self.signal_sell = round(
+            ((execute_query(max_price_range)) - (execute_query(max_price_range)) * self.get_interval()),
             round_float(num=self.last_price)
         )
 
@@ -160,11 +138,11 @@ class Datafarm:
         def report_log(order_side):
             """ Логирование ожидания сигнала
             """
-            signal = signal_buy if not self.__class__.OPEN_POSITION else signal_sell
+            signal = self.signal_buy if not self.__class__.OPEN_POSITION else self.signal_sell
             message = f'''
             {self.symbol}: {self.last_price}
             {order_side}: {signal}
-            INTERVAL: {get_interval() * 100}
+            INTERVAL: {self.get_interval() * 100}
             '''
             if message != self.__last_log:
                 print(message)
@@ -172,14 +150,14 @@ class Datafarm:
 
 
         if not self.__class__.OPEN_POSITION:
-            if self.last_price > signal_buy:
+            if self.last_price > self.signal_buy:
                 self.place_order('BUY')
                 report_signal('BUY')
             else:
                 report_log('BUY')
 
         if self.__class__.OPEN_POSITION:
-            if self.last_price < signal_sell:
+            if self.last_price < self.signal_sell:
                 self.place_order('SELL')
                 report_signal('SELL')
             else:
@@ -189,33 +167,10 @@ class Datafarm:
     def report_graph(self):
         """ Визуализация данных и сигналов на вход в рынок
         """
-        df_gph = pd.read_csv(self.data_file)
-        df_gph.Time = pd.to_datetime(df_gph.Time)
-        df_gph = df_gph[df_gph.Time > (df_gph.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
-        gph_last_price = round(((df_gph.Bid.iloc[-1] + df_gph.Ask.iloc[-1]) / 2), round_list[f'{self.symbol}'])
-        
-
-        def get_interval():
-            """ Расчитывает интервал для сигнала: либо четверть от диапазона, 
-                либо MIN_INTERVAL, если он больше
-            """
-            quarter_time_range = ((df_gph.Bid.max() - df_gph.Ask.min()) / 4) / gph_last_price
-            quarter_time_range = round(quarter_time_range, 3)
-            return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
-        
-
-        signal_buy_report = round(
-            (df_gph.Ask.min() + (df_gph.Ask.min() * get_interval())),
-            round_float(num=gph_last_price)
-        )
-        signal_sell_report = round(
-            (df_gph.Bid.max() - (df_gph.Bid.max() * get_interval())),
-            round_float(num=gph_last_price)
-        )
-        signal_line = signal_buy_report if not self.__class__.OPEN_POSITION else signal_sell_report
+        signal_line = self.signal_buy if not self.__class__.OPEN_POSITION else self.signal_sell
         chart = go.Scatter(
-            x=df_gph.Time, 
-            y=df_gph.Bid,
+            x=execute_query(column_time), 
+            y=execute_query(column_price),
             mode='lines', 
             line=dict(width=2), 
             marker=dict(color='blue')
@@ -248,7 +203,7 @@ class Datafarm:
         """
         global online
         bm = BinanceSocketManager(client=CLIENT)
-        ts = bm.symbol_ticker_socket(self.symbol)
+        ts = bm.trade_socket(self.symbol)
         async with ts as tscm:
             while True:
                 res = await tscm.recv()
@@ -259,6 +214,4 @@ class Datafarm:
                         print('Binance API Exception')
                         time.sleep(5)
                         self.create_frame(res)
-                    except KeyboardInterrupt:
-                        remove_file(self.data_file)
                 await asyncio.sleep(0)

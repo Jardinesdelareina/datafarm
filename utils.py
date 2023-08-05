@@ -1,9 +1,12 @@
 import os
 import requests
-from config import TELETOKEN, CHAT_ID
+import pandas as pd
+from sqlalchemy import text
+from config import TELETOKEN, CHAT_ID, ENGINE
 
 symbol_list = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT']
 round_list = {'BTCUSDT': 2, 'ETHUSDT': 2, 'BNBUSDT': 1, 'XRPUSDT': 4}
+
 
 def send_message(message: str):
     return requests.get(
@@ -17,7 +20,7 @@ def log_alert(message: str):
     send_message(message)
 
 
-def round_float(num: float) -> int:
+def round_float(num: float):
     num_str = str(num)
     counter = 0
     for i in num_str[::-1]:
@@ -27,11 +30,20 @@ def round_float(num: float) -> int:
             counter += 1
     return counter
 
+
 def remove_file(target_file):
-    """ Удаление файла
-    """
     if os.path.exists(target_file):
         os.remove(target_file)
         print(f'Файл {target_file} удален')
     else:
         print(f'Файл {target_file} не был найден')
+
+
+def execute_query(query: str):
+    try:
+        with ENGINE.connect() as conn:
+            result = conn.execute(text(query))
+            df_result = pd.DataFrame(result.fetchall())
+            return float(df_result.iloc[-1].values)
+    except:
+        print(f'Запрос {query} не может быть выполнен')

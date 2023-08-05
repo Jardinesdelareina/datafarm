@@ -1,0 +1,6 @@
+last_price = "SELECT price FROM market_stream ORDER BY time DESC LIMIT 1"
+min_price_range = "SELECT MIN(price) FROM market_stream WHERE time > NOW() - INTERVAL '1 HOUR'"
+max_price_range = "SELECT MAX(price) FROM market_stream WHERE time > NOW() - INTERVAL '1 HOUR'"
+column_time = "SELECT time from market_price"
+column_price = "SELECT price from market_price"
+drop_data = "SELECT FROM market_stream"

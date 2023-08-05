@@ -7,44 +7,18 @@ import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.exceptions import BinanceAPIException as bae
 from binance.helpers import round_step_size
-from src.config import CLIENT, DEBUG
-from src.utils import send_message, remove_file, round_float, round_list
-
-online = True
-
-
-def bot_off():
-    """ Остановка алгоритма
-    """
-    global online
-    online = False
-
-
-def start_single_bot(symbol, qnty=50):
-    """ Запуск алгоритма
-    """
-    global online
-    online = True
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    asyncio.run(Datafarm(symbol, qnty).socket_stream())
+from config import CLIENT, DEBUG
+from utils import log_alert, remove_file, round_float, round_list
 
 
 class Datafarm:
 
-    # Наличие открытой позиции в рынке
-    OPEN_POSITION = False
-
-    # Рабочий временной диапазон
-    TIME_RANGE = 1
-
-    # Дистанция от экстремума
-    MIN_INTERVAL = 0.002
+    OPEN_POSITION = False           # Наличие открытой позиции в рынке
+    TIME_RANGE = 60                # Рабочий временной диапазон (в часах)
+    MIN_INTERVAL = 0.002            # Дистанция от экстремума (в процентах)
 
     def __init__(self, symbol, qnty):
-        """ Конструктор класса Datafarm
-
-            symbol (str): Тикер криптовалютной пары
+        """ symbol (str): Тикер криптовалютной пары
 
             qnty (float): Объем ордера, по-умолчанию 50
 
@@ -64,7 +38,7 @@ class Datafarm:
         self.__last_log = None
 
 
-    def calculate_quantity(self) -> float:
+    def calculate_quantity(self):
         """ Расчет объема ордера 
         """
         symbol_info = CLIENT.get_symbol_info(self.symbol)
@@ -76,7 +50,7 @@ class Datafarm:
     def place_order(self, order_side: str):
         """ Размещение ордеров
             
-            order_side (str): Направление ордера, передаваемое при вызове функции в алгоритме
+            order_side (str): Направление ордера (BUY или SELL)
         """
 
         if order_side == 'BUY':
@@ -93,8 +67,7 @@ class Datafarm:
                 round_float(num=self.last_price)
             )
             message = f'{self.symbol} \n Buy \n {self.buy_price}'
-            send_message(message)
-            print(message)
+            log_alert(message)
 
         if order_side == 'SELL':
             order = None if DEBUG else CLIENT.create_order(
@@ -111,12 +84,11 @@ class Datafarm:
             )
             result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
             message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
-            send_message(message)
-            print(message)
+            log_alert(message)
 
 
     def create_frame(self, stream):
-        """ Получение данных, сохранение их в виде таблицы в файл формата .csv,
+        """ Получение данных, сохранение их в таблице .csv,
             чтение файла с данными и построение стратегии на основе полученных данных
 
             Структура таблицы файла .csv:
@@ -144,7 +116,7 @@ class Datafarm:
         # Чтение
         df_csv = pd.read_csv(self.data_file)
         df_csv.Time = pd.to_datetime(df_csv.Time)
-        time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(hours=self.TIME_RANGE))]
+        time_period = df_csv[df_csv.Time > (df_csv.Time.iloc[-1] - pd.Timedelta(minutes=self.TIME_RANGE))]
         
         self.last_price = round(
             ((time_period.Bid.iloc[-1] + time_period.Ask.iloc[-1]) / 2), 
@@ -157,8 +129,12 @@ class Datafarm:
                 либо четверть от диапазона, 
                 либо MIN_INTERVAL, если он больше
             """
-            quarter_time_range = ((time_period.Bid.max() - time_period.Ask.min()) / 4) / self.last_price
-            quarter_time_range = round(quarter_time_range, 3)
+            quarter_time_range = (abs(time_period.Bid.max() - time_period.Ask.min()) / 4) / self.last_price
+            print(time_period)
+            print(time_period.Bid.max())
+            print(time_period.Ask.min())
+            print(self.last_price)
+            print(quarter_time_range)
             return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
 
 
@@ -211,7 +187,7 @@ class Datafarm:
 
 
     def report_graph(self):
-        """ Визуализация определенных данных и сигналов на вход в рынок
+        """ Визуализация данных и сигналов на вход в рынок
         """
         df_gph = pd.read_csv(self.data_file)
         df_gph.Time = pd.to_datetime(df_gph.Time)
@@ -274,7 +250,7 @@ class Datafarm:
         bm = BinanceSocketManager(client=CLIENT)
         ts = bm.symbol_ticker_socket(self.symbol)
         async with ts as tscm:
-            while online:
+            while True:
                 res = await tscm.recv()
                 if res:
                     try:
@@ -284,6 +260,5 @@ class Datafarm:
                         time.sleep(5)
                         self.create_frame(res)
                     except KeyboardInterrupt:
-                        online = False
                         remove_file(self.data_file)
                 await asyncio.sleep(0)

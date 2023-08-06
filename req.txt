@@ -1,6 +1,6 @@
 environs
 pandas
-plotly
+psycopg2-binary
 pyclean
 python-binance
 sqlalchemy

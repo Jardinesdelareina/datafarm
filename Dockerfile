@@ -7,4 +7,5 @@ WORKDIR /app
 RUN pip install --upgrade pip
 COPY ./req.txt .
 RUN pip install -r req.txt
+COPY init.sql /docker-entrypoint-initdb.d/init.sql
 COPY . .

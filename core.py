@@ -1,8 +1,6 @@
 import time
 import asyncio
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.graph_objs as gos
 from binance import BinanceSocketManager
 from binance.exceptions import BinanceAPIException as bae
 from binance.helpers import round_step_size
@@ -85,21 +83,21 @@ class Datafarm:
                 message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
                 log_alert(message)
         else:
-            pass
+            self.report_graph()
 
 
     def get_interval(self):
         """ Расчитывает интервал для сигнала: 
             либо четверть от диапазона, 
             либо MIN_INTERVAL, если он больше
+
+            Переменная quaarter_time_range, как и MIN_INTERVAL передается в процентах,
+            но в десятичном виде. 
+            Например: 0.002 это 0.2%, а 0.023 это 2.3% 
         """
-        quarter_time_range = round(
-            abs(
-                ((execute_query(max_price_range) - execute_query(min_price_range)) * 0.25) \
-                / self.last_price), 
-            3
-        )
-        print(quarter_time_range)
+        max_price = execute_query(max_price_range)
+        min_price = execute_query(min_price_range)
+        quarter_time_range = round((abs(((max_price - min_price) * 0.25) / self.last_price)), 3)
         return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
 
 
@@ -165,40 +163,6 @@ class Datafarm:
                 report_signal('SELL')
             else:
                 report_log('SELL')
-
-
-    def report_graph(self):
-        """ Визуализация данных и сигналов на вход в рынок
-        """
-        signal_line = self.signal_buy if not self.__class__.OPEN_POSITION else self.signal_sell
-        chart = go.Scatter(
-            x=execute_query(column_time), 
-            y=execute_query(column_price),
-            mode='lines', 
-            line=dict(width=2), 
-            marker=dict(color='blue')
-        )
-        layout = go.Layout(
-            title=self.symbol,
-            yaxis=dict(side='right', showgrid=False, zeroline=False),
-            xaxis=dict(showgrid=False, zeroline=False),
-            shapes=[
-                dict(
-                    type='line',
-                    yref='y',
-                    y0=signal_line,
-                    y1=signal_line,
-                    xref='paper',
-                    x0=0,
-                    x1=1,
-                    line=dict(color='green' if not self.__class__.OPEN_POSITION else 'red'),
-                )
-            ],
-            margin=gos.layout.Margin(l=40, r=0, t=40, b=30)
-        )
-        data = [chart]
-        fig = go.Figure(data=data, layout=layout)
-        fig.write_image('report.png')
 
 
     async def socket_stream(self):

@@ -108,7 +108,7 @@ class Datafarm:
             df = pd.DataFrame([stream])
             df = df.loc[:,['s', 'E', 'p']]
             df.columns = ['symbol', 'time', 'price']
-            df.time = pd.Series(pd.to_datetime(df.time, unit='ms', utc=True)).dt.strftime('%Y-%m-%d %H:%M:%S')
+            df.time = pd.Series(pd.to_datetime(df.time, unit='ms', utc=True))
             df.price = round(df.price.astype(float), round_list[f'{self.symbol}'])
             df.to_sql(name='market_stream', con=ENGINE, if_exists='append', index=False)
         except KeyError:

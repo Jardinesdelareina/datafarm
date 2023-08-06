@@ -51,39 +51,41 @@ class Datafarm:
             
             order_side (str): Направление ордера (BUY или SELL)
         """
+        if not DEBUG:
+            if order_side == 'BUY':
+                order = None if DEBUG else CLIENT.create_order(
+                    symbol=self.symbol, 
+                    side='BUY', 
+                    type='MARKET', 
+                    quantity=self.calculate_quantity(),
+                )
+                execute_query(drop_data)
+                self.__class__.OPEN_POSITION = True
+                self.buy_price = round(
+                    float(order.get('fills')[0]['price']), 
+                    round_float(num=self.last_price)
+                )
+                message = f'{self.symbol} \n Buy \n {self.buy_price}'
+                log_alert(message)
 
-        if order_side == 'BUY':
-            order = None if DEBUG else CLIENT.create_order(
-                symbol=self.symbol, 
-                side='BUY', 
-                type='MARKET', 
-                quantity=self.calculate_quantity(),
-            )
-            execute_query(drop_data)
-            self.__class__.OPEN_POSITION = True
-            self.buy_price = round(
-                float(order.get('fills')[0]['price']), 
-                round_float(num=self.last_price)
-            )
-            message = f'{self.symbol} \n Buy \n {self.buy_price}'
-            log_alert(message)
-
-        if order_side == 'SELL':
-            order = None if DEBUG else CLIENT.create_order(
-                symbol=self.symbol, 
-                side='SELL', 
-                type='MARKET', 
-                quantity=self.calculate_quantity(),
-            )
-            execute_query(drop_data)
-            self.__class__.OPEN_POSITION = False
-            self.sell_price = round(
-                float(order.get('fills')[0]['price']), 
-                round_float(num=self.last_price)
-            )
-            result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
-            message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
-            log_alert(message)
+            if order_side == 'SELL':
+                order = None if DEBUG else CLIENT.create_order(
+                    symbol=self.symbol, 
+                    side='SELL', 
+                    type='MARKET', 
+                    quantity=self.calculate_quantity(),
+                )
+                execute_query(drop_data)
+                self.__class__.OPEN_POSITION = False
+                self.sell_price = round(
+                    float(order.get('fills')[0]['price']), 
+                    round_float(num=self.last_price)
+                )
+                result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
+                message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
+                log_alert(message)
+        else:
+            pass
 
 
     def get_interval(self):
@@ -91,11 +93,12 @@ class Datafarm:
             либо четверть от диапазона, 
             либо MIN_INTERVAL, если он больше
         """
-        quarter_time_range = (abs
-            (execute_query(max_price_range) - execute_query(min_price_range)) / 4
-        ) / self.last_price
-
-        print(self.last_price)
+        quarter_time_range = round(
+            abs(
+                ((execute_query(max_price_range) - execute_query(min_price_range)) * 0.25) \
+                / self.last_price), 
+            3
+        )
         print(quarter_time_range)
         return quarter_time_range if quarter_time_range > self.MIN_INTERVAL else self.MIN_INTERVAL
 
@@ -142,7 +145,7 @@ class Datafarm:
             message = f'''
             {self.symbol}: {self.last_price}
             {order_side}: {signal}
-            INTERVAL: {self.get_interval() * 100}
+            INTERVAL: {self.get_interval() * 100}%
             '''
             if message != self.__last_log:
                 print(message)

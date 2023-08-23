@@ -30,7 +30,6 @@ class Datafarm:
         """
         self.symbol = symbol.upper()
         self.qnty = qnty
-        self.data_file = f'{self.symbol}.csv'
         self.__last_signal = None
         self.__last_log = None
 
@@ -49,41 +48,38 @@ class Datafarm:
             
             order_side (str): Направление ордера (BUY или SELL)
         """
-        if not DEBUG:
-            if order_side == 'BUY':
-                order = None if DEBUG else CLIENT.create_order(
-                    symbol=self.symbol, 
-                    side='BUY', 
-                    type='MARKET', 
-                    quantity=self.calculate_quantity(),
-                )
-                execute_query(drop_data)
-                self.__class__.OPEN_POSITION = True
-                self.buy_price = round(
-                    float(order.get('fills')[0]['price']), 
-                    round_float(num=self.last_price)
-                )
-                message = f'{self.symbol} \n Buy \n {self.buy_price}'
-                log_alert(message)
+        if order_side == 'BUY':
+            order = None if DEBUG else CLIENT.create_order(
+                symbol=self.symbol, 
+                side='BUY', 
+                type='MARKET', 
+                quantity=self.calculate_quantity(),
+            )
+            execute_query(drop_data)
+            self.__class__.OPEN_POSITION = True
+            self.buy_price = round(
+                float(order.get('fills')[0]['price']), 
+                round_float(num=self.last_price)
+            )
+            message = f'{self.symbol} \n Buy \n {self.buy_price}'
+            log_alert(message)
 
-            if order_side == 'SELL':
-                order = None if DEBUG else CLIENT.create_order(
-                    symbol=self.symbol, 
-                    side='SELL', 
-                    type='MARKET', 
-                    quantity=self.calculate_quantity(),
-                )
-                execute_query(drop_data)
-                self.__class__.OPEN_POSITION = False
-                self.sell_price = round(
-                    float(order.get('fills')[0]['price']), 
-                    round_float(num=self.last_price)
-                )
-                result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
-                message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
-                log_alert(message)
-        else:
-            self.report_graph()
+        if order_side == 'SELL':
+            order = None if DEBUG else CLIENT.create_order(
+                symbol=self.symbol, 
+                side='SELL', 
+                type='MARKET', 
+                quantity=self.calculate_quantity(),
+            )
+            execute_query(drop_data)
+            self.__class__.OPEN_POSITION = False
+            self.sell_price = round(
+                float(order.get('fills')[0]['price']), 
+                round_float(num=self.last_price)
+            )
+            result = round(((self.sell_price - self.buy_price) * self.calculate_quantity()), 2)
+            message = f'{self.symbol} \n Sell \n {self.sell_price} \n Результат: {result} USDT'
+            log_alert(message)
 
 
     def get_interval(self):

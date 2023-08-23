@@ -1,4 +1,3 @@
-import os
 import requests
 import pandas as pd
 from sqlalchemy import text
@@ -29,14 +28,6 @@ def round_float(num: float):
         else:
             counter += 1
     return counter
-
-
-def remove_file(target_file):
-    if os.path.exists(target_file):
-        os.remove(target_file)
-        print(f'Файл {target_file} удален')
-    else:
-        print(f'Файл {target_file} не был найден')
 
 
 def execute_query(query: str):
